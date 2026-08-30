@@ -26,13 +26,16 @@ customers = spark.createDataFrame([
 # COMMAND ----------
 
 def extract_domain(email):
+    # FIX: rows with no captured email (e.g. phone-only signups) are a legitimate
+    # case, not an error -- return None instead of crashing on email.split(...).
+    if email is None:
+        return None
     return email.split("@")[1]
 
 rows = customers.collect()
 results = []
 for row in rows:
-    domain = extract_domain(row.email)  # BUG: no null check -- fails the moment a row
-                                         # with email=None is processed
+    domain = extract_domain(row.email)
     results.append((row.customer_id, domain))
 
 for r in results:
