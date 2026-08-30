@@ -34,3 +34,44 @@ not one job with ten tasks. For each notebook:
 
 No `dbt`, no Snowflake, no external data — every notebook is fully self-contained with synthetic
 data generated inline, so nothing here depends on the `insightops` demo project at all.
+
+## `pipeline/` — a real multi-task job with a genuine upstream failure
+
+Unlike the 10 standalone notebooks above, this is **one job with four dependent tasks**, each
+writing a real Delta table the next task reads — testing two things the standalone notebooks
+can't: a genuine **Upstream Task Dependency Failure** (when one task fails, its downstream tasks
+never run and are reported as upstream-failed, not independently broken), and **real re-run
+safety** (every write is `overwrite`-mode against durable tables, not just an in-memory print).
+
+| Task | Notebook | Depends on |
+|---|---|---|
+| `extract_daily_transactions` | `pipeline/01_extract_daily_transactions.py` | — |
+| `validate_and_clean_transactions` | `pipeline/02_validate_and_clean_transactions.py` | `extract_daily_transactions` |
+| `reconcile_with_ledger` | `pipeline/03_reconcile_with_ledger.py` | `validate_and_clean_transactions` |
+| `publish_summary` | `pipeline/04_publish_summary.py` | `reconcile_with_ledger` |
+
+**The bug**: task 2 writes the "clean" transactions table with a Delta `CHECK (amount >= 0)`
+constraint — written back when this feed only ever carried positive charges. Refunds (legitimate,
+negative `amount` values) were added to the upstream feed later as a real business requirement,
+and this constraint was never revisited. Every refund in the batch now fails the write with a
+Delta invariant violation, which fails task 2 — and tasks 3 and 4 never run at all, reported as
+`UPSTREAM_FAILED`, not because they have any bug of their own.
+
+**The right fix isn't "delete the constraint"** — that would silently let genuinely bad data
+back in. The constraint's *assumption* (no negative amounts) is what's wrong, not the existence
+of a data-quality gate; a good fix distinguishes refunds from actual bad data (e.g. constrain on
+`txn_type = 'refund' OR amount >= 0`) rather than removing the check entirely.
+
+### Setting this one up
+
+Create **one job** with **four tasks**, each:
+- Source: **Git provider**, same repo/branch as above
+- Path: `pipeline/<filename>` (e.g. `pipeline/01_extract_daily_transactions.py`)
+- **Depends on**: wire task 2 → depends on task 1, task 3 → depends on task 2, task 4 → depends
+  on task 3 (linear chain)
+- Base parameter `target_schema` (optional, defaults to `default` if unset) — set this if your
+  workspace doesn't allow writes to the classic `default` (hive_metastore) database; point it at
+  any Unity Catalog catalog/schema your cluster's identity can create tables in instead.
+
+Run the job once to confirm task 2 fails and tasks 3/4 show as upstream-failed, then note the
+run ID for `opsbuddy-fix`.
