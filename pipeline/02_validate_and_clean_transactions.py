@@ -4,8 +4,9 @@
 # MAGIC Second stage of the pipeline. Applies data-quality rules to the raw extract and
 # MAGIC produces the "clean" table that reconciliation and reporting both read from.
 # MAGIC
-# MAGIC The clean table enforces a hard data-quality gate: no negative amounts, on the
-# MAGIC assumption that "clean" transactions are always positive charges.
+# MAGIC Negative amounts are expected here -- they represent legitimate refunds, which
+# MAGIC the upstream feed has carried as a normal transaction type since that became a
+# MAGIC real business requirement. "Clean" only means non-null amounts.
 
 # COMMAND ----------
 
@@ -20,24 +21,16 @@ cleaned = raw.filter(raw.amount.isNotNull())
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Write the clean layer, with a CHECK constraint
-# MAGIC BUG: this constraint (`amount >= 0`) was written when this feed only ever
-# MAGIC carried positive charges. Refunds were added to the upstream feed later as a
-# MAGIC real business requirement, and this constraint was never revisited -- so every
-# MAGIC legitimate refund now fails the write outright with a Delta invariant violation.
+# MAGIC ## Write the clean layer
+# MAGIC No positive-amount constraint here (fixed SCRUM-80): a prior `amount >= 0` CHECK
+# MAGIC constraint predated refunds being added to the upstream feed and rejected every
+# MAGIC legitimate refund row with a Delta invariant violation. Reconciliation (stage 3)
+# MAGIC sums amounts per account and relies on refunds netting against charges, so this
+# MAGIC stage must pass negative amounts through rather than filtering or rejecting them.
 
 # COMMAND ----------
 
 spark.sql(f"DROP TABLE IF EXISTS {target_schema}.daily_txn_clean")
-cleaned.write.mode("overwrite").saveAsTable(f"{target_schema}.daily_txn_clean")
-spark.sql(
-    f"ALTER TABLE {target_schema}.daily_txn_clean "
-    f"ADD CONSTRAINT positive_amount_only CHECK (amount >= 0)"
-)
-
-# Re-write to force constraint enforcement against the actual refund rows already
-# present in this batch (constraints only reject rows written AFTER they're added,
-# so this second write is what actually surfaces the violation for this run's data).
 cleaned.write.mode("overwrite").saveAsTable(f"{target_schema}.daily_txn_clean")
 
 print(f"Wrote {cleaned.count()} rows to {target_schema}.daily_txn_clean")
