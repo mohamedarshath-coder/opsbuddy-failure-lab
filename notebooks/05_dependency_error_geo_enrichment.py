@@ -6,10 +6,17 @@
 
 # COMMAND ----------
 
-# BUG: geopy is a real, commonly-used geocoding library, but it isn't part of this
-# cluster's base image and was never added to the cluster's library configuration --
-# a very common real mistake when a notebook is copied from a different cluster/
-# workspace that happened to have it pre-installed.
+# FIX (SCRUM-83): geopy is not part of this cluster's base image and isn't declared in the
+# job/cluster library configuration. Install it explicitly for this notebook run and restart
+# the Python process so the import below picks it up.
+# MAGIC %pip install geopy
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 from geopy.geocoders import Nominatim
 
 geolocator = Nominatim(user_agent="insightops_logistics")
