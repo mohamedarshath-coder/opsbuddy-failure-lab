@@ -38,7 +38,7 @@ from pyspark.sql import functions as F
 # BUG: this still references region_code_legacy, which was dropped two cells ago --
 # a realistic case of a rollup query written against an older version of the
 # pipeline that never got updated after the column cleanup.
-regional_summary = orders_clean.groupBy("region_code_legacy").agg(
+regional_summary = orders_clean.groupBy("region_code").agg(
     F.sum("order_amount").alias("total_revenue")
 )
 
