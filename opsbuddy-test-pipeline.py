@@ -128,8 +128,9 @@ rows = spark.table("dev.opsbuddy_test.bronze_orders").collect()
 
 adjusted_totals = []
 for row in rows:
-    # BUG #2: no null check on row.order_amount before the multiplication
-    adjusted = row.order_amount * (1 - row.discount_pct)
+    # FIXED: guard against null order_amount (was None for some bronze rows)
+    order_amount = row.order_amount if row.order_amount is not None else 0.0
+    adjusted = order_amount * (1 - row.discount_pct)
     adjusted_totals.append((row.order_id, row.customer_id, adjusted))
 
 adjusted_df = spark.createDataFrame(
