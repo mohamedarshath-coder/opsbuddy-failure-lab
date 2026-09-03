@@ -94,7 +94,7 @@ display(silver_df)
 
 gold_df = (
     spark.table("dev.opsbuddy_test.silver_orders")
-    .groupBy("customer_id")  # BUG #1: should be "cust_id" -- this column was renamed in Silver
+    .groupBy("cust_id")  # FIXED: was "customer_id", renamed in Silver layer to "cust_id"
     .agg(
         F.sum("order_amount").alias("total_order_amount"),
         F.avg("discount_pct").alias("avg_discount_pct"),
