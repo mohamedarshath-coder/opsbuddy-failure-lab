@@ -53,7 +53,8 @@ rows = spark.table("dev.opsbuddy_test.bronze_customer_summaries").collect()
 ltv_estimates = []
 for row in rows:
     multiplier = TIER_MULTIPLIERS.get(row.customer_tier, 1.0)
-    ltv = row.avg_order_value * row.orders_last_year * multiplier
+    avg_val = row.avg_order_value if row.avg_order_value is not None else 0.0
+    ltv = avg_val * row.orders_last_year * multiplier
     ltv_estimates.append((row.customer_id, row.customer_tier, ltv))
 
 ltv_df = spark.createDataFrame(
