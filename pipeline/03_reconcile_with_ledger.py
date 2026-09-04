@@ -37,10 +37,12 @@ txn_totals = cleaned.groupBy("account_id").agg(
 )
 
 # Synthetic ledger balances -- in a real pipeline this would come from the
-# accounting system's own export.
+# accounting system's own export. is_active mirrors the accounting system's own
+# dormant-account flag -- every 5th account is treated as closed/dormant so the
+# downstream filter below has a real column to resolve against.
 ledger = spark.createDataFrame(
-    [(f"ACC{i:04d}", float(i % 500)) for i in range(1, 201)],
-    ["account_id", "ledger_balance"],
+    [(f"ACC{i:04d}", float(i % 500), i % 5 != 0) for i in range(1, 201)],
+    ["account_id", "ledger_balance", "is_active"],
 )
 
 # COMMAND ----------
