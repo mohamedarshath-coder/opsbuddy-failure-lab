@@ -29,8 +29,17 @@ ledger = spark.createDataFrame(
 
 # COMMAND ----------
 
-reconciliation = txn_totals.join(ledger, on="account_id", how="left").withColumn(
-    "discrepancy", F.col("txn_total") - F.col("ledger_balance")
+# MAGIC %md
+# MAGIC ## Restrict reconciliation to active accounts only
+# MAGIC Finance asked to exclude closed/dormant accounts from the daily discrepancy review --
+# MAGIC no point flagging a balance mismatch on an account nobody's monitoring anymore.
+
+# COMMAND ----------
+
+reconciliation = (
+    txn_totals.join(ledger, on="account_id", how="left")
+    .withColumn("discrepancy", F.col("txn_total") - F.col("ledger_balance"))
+    .filter(F.col("is_active") == True)
 )
 
 reconciliation.write.mode("overwrite").saveAsTable(

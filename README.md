@@ -50,17 +50,29 @@ safety** (every write is `overwrite`-mode against durable tables, not just an in
 | `reconcile_with_ledger` | `pipeline/03_reconcile_with_ledger.py` | `validate_and_clean_transactions` |
 | `publish_summary` | `pipeline/04_publish_summary.py` | `reconcile_with_ledger` |
 
-**The bug**: task 2 writes the "clean" transactions table with a Delta `CHECK (amount >= 0)`
-constraint — written back when this feed only ever carried positive charges. Refunds (legitimate,
-negative `amount` values) were added to the upstream feed later as a real business requirement,
-and this constraint was never revisited. Every refund in the batch now fails the write with a
-Delta invariant violation, which fails task 2 — and tasks 3 and 4 never run at all, reported as
-`UPSTREAM_FAILED`, not because they have any bug of their own.
+**Task 2's original bug (fixed, kept for history)**: task 2 used to write the "clean"
+transactions table with a Delta `CHECK (amount >= 0)` constraint — written back when this feed
+only ever carried positive charges. Refunds (legitimate, negative `amount` values) were added to
+the upstream feed later as a real business requirement, and this constraint was never revisited,
+so every refund failed the write. **SCRUM-80 fixed this** — not by deleting the constraint
+(which would've silently let genuinely bad data back in), but by narrowing its assumption:
+`CHECK (txn_type = 'refund' OR amount >= 0)`. Task 2 is clean now; this is documented here as
+the pipeline's history, not a currently-reproducible bug.
 
-**The right fix isn't "delete the constraint"** — that would silently let genuinely bad data
-back in. The constraint's *assumption* (no negative amounts) is what's wrong, not the existence
-of a data-quality gate; a good fix distinguishes refunds from actual bad data (e.g. constrain on
-`txn_type = 'refund' OR amount >= 0`) rather than removing the check entirely.
+**Two new, independent bugs now live in tasks 3 and 4** — built to test a *second* failure
+surfacing only after an *earlier* one in the same pipeline gets fixed, i.e. "fix #1, re-run,
+discover #2" rather than one incident per pipeline:
+
+- **Task 3** (`03_reconcile_with_ledger.py`): filters the reconciliation output to
+  `is_active == True` — a column that was never actually added to either `txn_totals` or the
+  synthetic `ledger` DataFrame. Fails with `AnalysisException: cannot resolve column 'is_active'`
+  — a genuinely common real bug shape: someone adds a business-motivated filter assuming a column
+  exists that was never actually threaded through upstream.
+- **Task 4** (`04_publish_summary.py`): computes `F.avg(F.abs("discrepency"))` — misspelled
+  (the real column is `discrepancy`). Fails with `AnalysisException: cannot resolve column
+  'discrepency'`. Independent root cause from task 3's bug (a plain typo, not a missing column),
+  and only reachable once task 3 is fixed and rerun — before that, task 4 never runs at all
+  (reported `UPSTREAM_FAILED`).
 
 ### Setting this one up
 
