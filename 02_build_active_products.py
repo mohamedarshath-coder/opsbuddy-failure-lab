@@ -46,7 +46,7 @@ print(f"Bronze products written: {bronze_df.count()} rows")
 
 silver_df = (
     spark.table("dev.opsbuddy_test.bronze_products")
-    .filter(F.col("status") == "Active")
+    .filter(F.col("status") == "ACTIVE")
     .select("product_id", "product_name", "unit_price")
 )
 
