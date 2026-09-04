@@ -58,6 +58,11 @@ reconciliation = (
     txn_totals.join(ledger, on="account_id", how="left")
     .withColumn("discrepancy", F.col("txn_total") - F.col("ledger_balance"))
     .filter(F.col("is_active") == True)
+    # is_active is a filter-only column, not part of the published report's
+    # schema -- drop it before writing so the existing daily_reconciliation_report
+    # table's schema (account_id, txn_total, ledger_balance, discrepancy) is
+    # preserved and the write doesn't trip a Delta schema mismatch.
+    .select("account_id", "txn_total", "ledger_balance", "discrepancy")
 )
 
 reconciliation.write.mode("overwrite").saveAsTable(
