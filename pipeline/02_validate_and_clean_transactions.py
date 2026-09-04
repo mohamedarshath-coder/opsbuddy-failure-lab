@@ -15,7 +15,7 @@ target_schema = dbutils.widgets.get("target_schema")
 
 # COMMAND ----------
 
-raw = spark.table(f"{target_schema}.daily_txn_raw")
+raw = spark.table(f"{target_schema}.daily_txn_extract")
 cleaned = raw.filter(raw.amount.isNotNull())
 
 # COMMAND ----------

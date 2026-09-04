@@ -37,11 +37,26 @@ data generated inline, so nothing here depends on the `insightops` demo project 
 
 ## `pipeline/` — a real multi-task job with a genuine upstream failure
 
-Unlike the 10 standalone notebooks above, this is **one job with four dependent tasks**, each
-writing a real Delta table the next task reads — testing two things the standalone notebooks
-can't: a genuine **Upstream Task Dependency Failure** (when one task fails, its downstream tasks
-never run and are reported as upstream-failed, not independently broken), and **real re-run
-safety** (every write is `overwrite`-mode against durable tables, not just an in-memory print).
+Unlike the 10 standalone notebooks above, this is **two separate jobs** mirroring a real
+production shape: an upstream ingestion job owned by a different team, and a four-task
+reconciliation job that reads what it lands — testing three things the standalone notebooks
+can't: a genuine **cross-job data lineage lead** (the reconciliation job's failures trace back,
+one hop upstream, to a table a *different* job produced — not just tables within the same job), a
+genuine **Upstream Task Dependency Failure** (when one task fails, its downstream tasks never run
+and are reported as upstream-failed, not independently broken), and **real re-run safety** (every
+write is `overwrite`-mode against durable tables, not just an in-memory print).
+
+**Job A — `daily_txn_ingestion`** (separate job, one task):
+
+| Task | Notebook | Depends on |
+|---|---|---|
+| `ingest_raw_transactions` | `pipeline/00_ingest_raw_transactions.py` | — |
+
+Owned, in the real-world analogy, by the upstream payments-ingestion team — it lands
+`daily_txn_raw` on its own schedule. The reconciliation job below only ever reads this table; it
+never writes to it.
+
+**Job B — `daily_revenue_reconciliation`** (four dependent tasks):
 
 | Task | Notebook | Depends on |
 |---|---|---|
@@ -49,6 +64,14 @@ safety** (every write is `overwrite`-mode against durable tables, not just an in
 | `validate_and_clean_transactions` | `pipeline/02_validate_and_clean_transactions.py` | `extract_daily_transactions` |
 | `reconcile_with_ledger` | `pipeline/03_reconcile_with_ledger.py` | `validate_and_clean_transactions` |
 | `publish_summary` | `pipeline/04_publish_summary.py` | `reconcile_with_ledger` |
+
+`extract_daily_transactions` reads `daily_txn_raw` (Job A's output) and writes today's slice to
+`daily_txn_extract`, which `validate_and_clean_transactions` reads in turn — so
+`get_table_lineage`'s `upstream_producers`, walked one hop back from anything task 1 touches,
+correctly names **Job A**, a different job, not this one. `reconcile_with_ledger` also reads
+`daily_txn_raw` directly (a real row-count sanity check, see below) before its own bug, so that
+same cross-job lineage lead surfaces even on the task 3 incident below — not only on a
+successful task 1 run.
 
 **Task 2's original bug (fixed, kept for history)**: task 2 used to write the "clean"
 transactions table with a Delta `CHECK (amount >= 0)` constraint — written back when this feed
@@ -67,7 +90,12 @@ discover #2" rather than one incident per pipeline:
   `is_active == True` — a column that was never actually added to either `txn_totals` or the
   synthetic `ledger` DataFrame. Fails with `AnalysisException: cannot resolve column 'is_active'`
   — a genuinely common real bug shape: someone adds a business-motivated filter assuming a column
-  exists that was never actually threaded through upstream.
+  exists that was never actually threaded through upstream. `AnalysisException` on an unresolved
+  column is raised at query-analysis time, before Spark ever schedules a job for that particular
+  transformation — the row-count sanity check just above it in the same task (a real `.count()`
+  against both `daily_txn_raw` and `daily_txn_clean`) is what guarantees at least one completed
+  read of each table gets captured for this run before the later line crashes it, so
+  `get_table_lineage` still has something real to report even though the run ultimately fails.
 - **Task 4** (`04_publish_summary.py`): computes `F.avg(F.abs("discrepency"))` — misspelled
   (the real column is `discrepancy`). Fails with `AnalysisException: cannot resolve column
   'discrepency'`. Independent root cause from task 3's bug (a plain typo, not a missing column),
@@ -76,14 +104,22 @@ discover #2" rather than one incident per pipeline:
 
 ### Setting this one up
 
-Create **one job** with **four tasks**, each:
+Create **two jobs**. Every task in both, same settings:
 - Source: **Git provider**, same repo/branch as above
 - Path: `pipeline/<filename>` (e.g. `pipeline/01_extract_daily_transactions.py`)
-- **Depends on**: wire task 2 → depends on task 1, task 3 → depends on task 2, task 4 → depends
-  on task 3 (linear chain)
 - Base parameter `target_schema` (optional, defaults to `default` if unset) — set this if your
   workspace doesn't allow writes to the classic `default` (hive_metastore) database; point it at
-  any Unity Catalog catalog/schema your cluster's identity can create tables in instead.
+  any Unity Catalog catalog/schema your cluster's identity can create tables in instead (use the
+  **same** value on both jobs — Job B reads tables Job A writes).
 
-Run the job once to confirm task 2 fails and tasks 3/4 show as upstream-failed, then note the
-run ID for `opsbuddy-fix`.
+**Job A — `daily_txn_ingestion`**: one task, `ingest_raw_transactions` →
+`pipeline/00_ingest_raw_transactions.py`, no dependencies.
+
+**Job B — `daily_revenue_reconciliation`**: four tasks, `extract_daily_transactions` →
+`validate_and_clean_transactions` → `reconcile_with_ledger` → `publish_summary`, each depending
+on the one before it (linear chain).
+
+Run Job A once first (it needs to have landed `daily_txn_raw` before Job B's task 1 can read it),
+then run Job B. With task 2's original bug already fixed (see above), tasks 1 and 2 succeed,
+task 3 fails on the `is_active` bug, and task 4 shows as `UPSTREAM_FAILED` (never runs). Note
+Job B's run ID for `opsbuddy-fix`.

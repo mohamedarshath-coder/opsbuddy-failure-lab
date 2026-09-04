@@ -16,6 +16,22 @@ from pyspark.sql import functions as F
 
 cleaned = spark.table(f"{target_schema}.daily_txn_clean")
 
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Sanity check: raw feed vs. cleaned feed row counts
+# MAGIC Finance wants confidence that cleaning isn't silently dropping legitimate transactions --
+# MAGIC compare today's raw ingested row count (from the upstream `daily_txn_ingestion` job)
+# MAGIC against what actually made it into the cleaned table before reconciling.
+
+# COMMAND ----------
+
+raw_count = spark.table(f"{target_schema}.daily_txn_raw").count()
+clean_count = cleaned.count()
+print(f"Raw: {raw_count} rows, Clean: {clean_count} rows (dropped {raw_count - clean_count})")
+
+# COMMAND ----------
+
 txn_totals = cleaned.groupBy("account_id").agg(
     F.sum("amount").alias("txn_total")
 )
