@@ -46,7 +46,7 @@ print(f"Raw product feed written: {raw_df.count()} rows")
 
 active_products = (
     spark.table("dev.opsbuddy_test.raw_product_feed")
-    .filter(F.col("is_active") == "true")
+    .filter(F.upper(F.col("is_active")) == "TRUE")
     .select("product_id", "product_name", "base_price")
 )
 
