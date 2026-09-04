@@ -35,6 +35,39 @@ not one job with ten tasks. For each notebook:
 No `dbt`, no Snowflake, no external data — every notebook is fully self-contained with synthetic
 data generated inline, so nothing here depends on the `insightops` demo project at all.
 
+## `notebooks/11_shared_module_bug_vip_risk_threshold.py` — a genuine multi-file root cause
+
+Unlike notebooks 1–10, this one is **not** self-contained — it imports
+`notebooks/common/discrepancy_rules.py`, a small shared module. That's the point: it tests
+whether a fix lands as a single-file patch to whichever file happens to appear in the stack
+trace, or as the multi-file change the root cause actually requires.
+
+**What actually breaks**: the notebook builds a synthetic reconciliation snapshot with both
+`standard` and `vip` tier accounts, flags high-risk ones via the shared `is_high_risk()`
+function, then asserts a standing business invariant — no VIP account should ever get flagged by
+the standard threshold, since larger discrepancies are normal for VIP accounts (support
+escalated a false-positive VIP flag once before). `is_high_risk()` only ever applies one
+hardcoded $100 threshold with no way to vary it, so a VIP account with a $150 discrepancy trips
+it anyway. Fails with a plain `AssertionError`, not an `AnalysisException` — the code runs fine,
+the *business logic* is wrong.
+
+**Why the fix genuinely needs two files, not one:**
+- `notebooks/common/discrepancy_rules.py` — `is_high_risk(discrepancy)` has no `threshold`
+  parameter at all; it must gain one (e.g. `is_high_risk(discrepancy, threshold=100.0)`) before
+  a caller can possibly ask for anything other than the hardcoded default.
+- `notebooks/11_shared_module_bug_vip_risk_threshold.py` — even after the shared function can
+  accept a threshold, the notebook still calls it uniformly with no tier awareness at all; it
+  must be updated to pass a higher threshold (e.g. `500.0`) for `tier == "vip"` rows.
+
+Neither change alone resolves the incident: extending the shared function without updating the
+caller changes nothing (nobody passes the new argument), and the caller can't pass a threshold
+the function doesn't yet accept. A correct fix's `AFFECTED_FILES` should name both.
+
+**Setting this one up**: same as notebooks 1–10 — its own job, one task, Git provider source,
+notebook path `notebooks/11_shared_module_bug_vip_risk_threshold.py`. No `target_schema`
+parameter needed (it writes to the fixed `default.high_risk_accounts_demo` table). Run once to
+confirm the `AssertionError`, then note the run ID for `opsbuddy-fix`.
+
 ## `pipeline/` — a real multi-task job with a genuine upstream failure
 
 Unlike the 10 standalone notebooks above, this is **two separate jobs** mirroring a real
