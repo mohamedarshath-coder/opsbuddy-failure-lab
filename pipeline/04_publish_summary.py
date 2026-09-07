@@ -29,7 +29,7 @@ summary = report.agg(
     F.count("*").alias("accounts_checked"),
     F.sum(F.when(F.col("discrepancy") != 0, 1).otherwise(0)).alias("accounts_with_discrepancy"),
     F.sum("discrepancy").alias("net_discrepancy"),
-    F.avg(F.abs("discrepency")).alias("avg_abs_discrepancy"),
+    F.avg(F.abs("discrepancy")).alias("avg_abs_discrepancy"),
 )
 
 summary.write.mode("overwrite").saveAsTable(f"{target_schema}.daily_reconciliation_summary")
