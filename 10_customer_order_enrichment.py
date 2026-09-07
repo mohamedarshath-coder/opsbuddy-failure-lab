@@ -44,7 +44,13 @@ dim_rows = [
 dim_rows_with_seq = [(*row, idx) for idx, row in enumerate(dim_rows)]
 
 dim_df = spark.createDataFrame(dim_rows_with_seq, schema=dim_schema)
-dim_df.write.mode("overwrite").saveAsTable("dev.opsbuddy_test.dim_customer")
+# overwriteSchema is required here: this notebook intentionally adds the new
+# `_ingest_seq` column to dim_customer's schema, and mode("overwrite") alone only
+# replaces data, not schema -- without this option the write fails outright with
+# DELTA_METADATA_MISMATCH against the table's previously-existing 3-column schema.
+dim_df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+    "dev.opsbuddy_test.dim_customer"
+)
 print(f"Customer dimension written: {dim_df.count()} rows")
 
 # COMMAND ----------
