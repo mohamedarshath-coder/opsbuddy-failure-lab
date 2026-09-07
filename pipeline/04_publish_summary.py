@@ -32,5 +32,7 @@ summary = report.agg(
     F.avg(F.abs("discrepancy")).alias("avg_abs_discrepancy"),
 )
 
-summary.write.mode("overwrite").saveAsTable(f"{target_schema}.daily_reconciliation_summary")
+summary.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+    f"{target_schema}.daily_reconciliation_summary"
+)
 display(summary)
