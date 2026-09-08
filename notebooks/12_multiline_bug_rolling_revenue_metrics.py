@@ -47,19 +47,19 @@ metrics = (
     daily_sales.withColumn(
         "rolling_revenue",
         F.sum("revenue").over(
-            Window.partitionBy("store_id").orderBy("txn_date").rowsBetween(-6, 0)
+            Window.partitionBy("store_id").orderBy("transaction_date").rowsBetween(-6, 0)
         ),
     )
     .withColumn(
         "rolling_order_count",
         F.count("revenue").over(
-            Window.partitionBy("store_id").orderBy("txn_date").rowsBetween(-6, 0)
+            Window.partitionBy("store_id").orderBy("transaction_date").rowsBetween(-6, 0)
         ),
     )
     .withColumn(
         "rolling_avg_order_value",
         F.avg("revenue").over(
-            Window.partitionBy("store_id").orderBy("txn_date").rowsBetween(-6, 0)
+            Window.partitionBy("store_id").orderBy("transaction_date").rowsBetween(-6, 0)
         ),
     )
 )
