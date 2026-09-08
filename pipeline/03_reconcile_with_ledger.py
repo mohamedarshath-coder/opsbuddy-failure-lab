@@ -37,10 +37,12 @@ txn_totals = cleaned.groupBy("account_id").agg(
 )
 
 # Synthetic ledger balances -- in a real pipeline this would come from the
-# accounting system's own export.
+# accounting system's own export. is_active mirrors the accounting system's own
+# dormant-account flag -- every 5th account is treated as closed/dormant so the
+# downstream filter below has a real column to resolve against.
 ledger = spark.createDataFrame(
-    [(f"ACC{i:04d}", float(i % 500)) for i in range(1, 201)],
-    ["account_id", "ledger_balance"],
+    [(f"ACC{i:04d}", float(i % 500), i % 5 != 0) for i in range(1, 201)],
+    ["account_id", "ledger_balance", "is_active"],
 )
 
 # COMMAND ----------
@@ -56,6 +58,11 @@ reconciliation = (
     txn_totals.join(ledger, on="account_id", how="left")
     .withColumn("discrepancy", F.col("txn_total") - F.col("ledger_balance"))
     .filter(F.col("is_active") == True)
+    # is_active is a filter-only column, not part of the published report's
+    # schema -- drop it before writing so the existing daily_reconciliation_report
+    # table's schema (account_id, txn_total, ledger_balance, discrepancy) is
+    # preserved and the write doesn't trip a Delta schema mismatch.
+    .select("account_id", "txn_total", "ledger_balance", "discrepancy")
 )
 
 reconciliation.write.mode("overwrite").saveAsTable(
