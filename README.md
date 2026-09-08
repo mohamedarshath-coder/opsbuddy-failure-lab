@@ -68,6 +68,36 @@ notebook path `notebooks/11_shared_module_bug_vip_risk_threshold.py`. No `target
 parameter needed (it writes to the fixed `default.high_risk_accounts_demo` table). Run once to
 confirm the `AssertionError`, then note the run ID for `opsbuddy-fix`.
 
+## `notebooks/12_multiline_bug_rolling_revenue_metrics.py` — the same mistake repeated on multiple lines
+
+Different dimension from notebook 11: not multiple *files*, multiple *lines* within one file, all
+carrying the identical mistake. Tests whether a fix catches every occurrence, or just the one
+line the stack trace happens to point at.
+
+**What actually breaks**: the notebook renames `txn_date` to `transaction_date` early on (a
+real, business-motivated standardization to match the rest of the reporting layer's schema), then
+computes three related rolling-window metrics (`rolling_revenue`, `rolling_order_count`,
+`rolling_avg_order_value`) — each with its own separately-written `Window.partitionBy("store_id")
+.orderBy("txn_date")`, still referencing the pre-rename column name. Execution stops at the
+*first* one (`rolling_revenue`) with `UNRESOLVED_COLUMN.WITH_SUGGESTION: txn_date`, so the stack
+trace only ever points at that one line — but the identical `orderBy("txn_date")` mistake is
+also sitting, un-triggered, in the other two `.withColumn` blocks further down the same
+expression.
+
+**Why this is a real test of fix completeness, not just fix correctness**: a fix that patches
+only the line the exception names (the first `orderBy("txn_date")`) is enough to make *this run*
+succeed — the notebook would go on to fail on `rolling_order_count`'s identical bug the next time
+it runs, i.e. exactly the "fix #1, re-run, discover #2" shape from `pipeline/`, except here it's
+the *same* line of code copy-pasted three times, not three independent bugs. A complete fix finds
+and corrects all three `orderBy("txn_date")` occurrences in one pass, because a root-cause
+analysis that actually reads the whole file (not just the line the traceback names) should
+recognize the same mistake repeated, not just the one instance that happened to execute first.
+
+**Setting this one up**: same pattern as notebooks 1–11 — its own job, one task, Git provider
+source, notebook path `notebooks/12_multiline_bug_rolling_revenue_metrics.py`. No `target_schema`
+parameter needed (synthetic data only, no table writes). Run once to confirm the
+`UNRESOLVED_COLUMN.WITH_SUGGESTION: txn_date` failure, then note the run ID for `opsbuddy-fix`.
+
 ## `pipeline/` — a real multi-task job with a genuine upstream failure
 
 Unlike the 10 standalone notebooks above, this is **two separate jobs** mirroring a real
