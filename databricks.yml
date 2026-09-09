@@ -1,0 +1,31 @@
+# Declarative Automation Bundle configuration for prod_mode_probe2 pipeline.
+#
+# Deploy with:  databricks bundle deploy --target dev
+# Run with:     databricks bundle run prod_mode_probe2_pipeline --target dev
+
+bundle:
+  name: prod_mode_probe2
+
+resources:
+  pipelines:
+    prod_mode_probe2_pipeline:
+      name: "prod_mode_probe2 (pipeline)"
+      catalog: "dev"
+      target: "academy_bronze"
+      photon: true
+      edition: "ADVANCED"
+      channel: "CURRENT"
+      libraries:
+        - file:
+            path: ./src/medallion_pipeline.py
+      clusters:
+        - label: "default"
+          node_type_id: "Standard_DS3_v2"
+          num_workers: 0
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-3750626659891863.3.azuredatabricks.net
