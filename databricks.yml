@@ -66,6 +66,7 @@ targets:
       target_schema: "qa"
     workspace:
       host: https://adb-3750626659891863.3.azuredatabricks.net
+      root_path: /Workspace/Users/mohamed.arshath@latentviewo365.onmicrosoft.com/.bundle/${bundle.name}/${bundle.target}
 
   prod:
     mode: production
@@ -73,3 +74,6 @@ targets:
       target_schema: "default"
     workspace:
       host: https://adb-3750626659891863.3.azuredatabricks.net
+      # required for any target with mode: production, so exactly one copy of the bundle is
+      # ever deployed regardless of which CI runner/user account triggers the deploy step.
+      root_path: /Workspace/Users/mohamed.arshath@latentviewo365.onmicrosoft.com/.bundle/${bundle.name}/${bundle.target}
