@@ -48,5 +48,24 @@ raw = spark.createDataFrame(
 
 # COMMAND ----------
 
-raw.write.mode("overwrite").saveAsTable(f"{target_schema}.daily_txn_raw")
-print(f"Wrote {raw.count()} rows to {target_schema}.daily_txn_raw")
+import time
+from pyspark.errors import AnalysisException
+
+MAX_RETRIES = 3
+for attempt in range(1, MAX_RETRIES + 1):
+    try:
+        raw.write.mode("overwrite").saveAsTable(f"{target_schema}.daily_txn_raw")
+        print(f"Wrote {raw.count()} rows to {target_schema}.daily_txn_raw")
+        break
+    except Exception as e:
+        if "ConcurrentAppendException" in str(type(e).__name__) or "DELTA_CONCURRENT" in str(e):
+            if attempt < MAX_RETRIES:
+                wait = 2 ** attempt
+                print(f"Delta concurrent conflict (attempt {attempt}/{MAX_RETRIES}), retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                raise RuntimeError(
+                    f"Delta concurrent conflict persisted after {MAX_RETRIES} attempts"
+                ) from e
+        else:
+            raise
