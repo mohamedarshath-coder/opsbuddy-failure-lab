@@ -145,25 +145,16 @@ so every refund failed the write. **SCRUM-80 fixed this** — not by deleting th
 `CHECK (txn_type = 'refund' OR amount >= 0)`. Task 2 is clean now; this is documented here as
 the pipeline's history, not a currently-reproducible bug.
 
-**Two new, independent bugs now live in tasks 3 and 4** — built to test a *second* failure
-surfacing only after an *earlier* one in the same pipeline gets fixed, i.e. "fix #1, re-run,
-discover #2" rather than one incident per pipeline:
+**Task 3 status**: `03_reconcile_with_ledger.py`'s `is_active` filter was originally designed as
+a bug (the column missing from the synthetic `ledger` DataFrame) — that's since been corrected in
+the actual code (`is_active` is properly added to `ledger` and survives the join), so task 3 runs
+clean now. Left documented here as history, not a currently-reproducible bug — don't expect
+`AnalysisException: cannot resolve column 'is_active'` from a fresh run.
 
-- **Task 3** (`03_reconcile_with_ledger.py`): filters the reconciliation output to
-  `is_active == True` — a column that was never actually added to either `txn_totals` or the
-  synthetic `ledger` DataFrame. Fails with `AnalysisException: cannot resolve column 'is_active'`
-  — a genuinely common real bug shape: someone adds a business-motivated filter assuming a column
-  exists that was never actually threaded through upstream. `AnalysisException` on an unresolved
-  column is raised at query-analysis time, before Spark ever schedules a job for that particular
-  transformation — the row-count sanity check just above it in the same task (a real `.count()`
-  against both `daily_txn_raw` and `daily_txn_clean`) is what guarantees at least one completed
-  read of each table gets captured for this run before the later line crashes it, so
-  `get_table_lineage` still has something real to report even though the run ultimately fails.
-- **Task 4** (`04_publish_summary.py`): computes `F.avg(F.abs("discrepency"))` — misspelled
-  (the real column is `discrepancy`). Fails with `AnalysisException: cannot resolve column
-  'discrepency'`. Independent root cause from task 3's bug (a plain typo, not a missing column),
-  and only reachable once task 3 is fixed and rerun — before that, task 4 never runs at all
-  (reported `UPSTREAM_FAILED`).
+**Task 4** (`04_publish_summary.py`): computes `F.avg(F.abs("discrepency"))` — misspelled (the
+real column is `discrepancy`). Fails with `AnalysisException: cannot resolve column
+'discrepency'`. With task 3 clean, this is the pipeline's one remaining independent bug, reached
+directly (no upstream failure blocking it).
 
 ### Setting this one up
 
@@ -183,6 +174,5 @@ Create **two jobs**. Every task in both, same settings:
 on the one before it (linear chain).
 
 Run Job A once first (it needs to have landed `daily_txn_raw` before Job B's task 1 can read it),
-then run Job B. With task 2's original bug already fixed (see above), tasks 1 and 2 succeed,
-task 3 fails on the `is_active` bug, and task 4 shows as `UPSTREAM_FAILED` (never runs). Note
-Job B's run ID for `opsbuddy-fix`.
+then run Job B. With task 2's original bug already fixed (see above) and task 3 clean, tasks 1-3
+succeed and task 4 fails on the `discrepency` typo. Note Job B's run ID for `opsbuddy-fix`.
