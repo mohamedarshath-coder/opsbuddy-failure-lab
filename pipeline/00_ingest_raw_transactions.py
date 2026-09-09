@@ -18,7 +18,6 @@ target_schema = dbutils.widgets.get("target_schema")
 # COMMAND ----------
 
 import random
-from pyspark.sql import functions as F
 
 random.seed(7)
 

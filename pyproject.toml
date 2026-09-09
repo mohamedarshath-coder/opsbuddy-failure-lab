@@ -1,0 +1,8 @@
+[tool.ruff]
+# Databricks notebook-source .py files reference these as implicit runtime globals -- the
+# Databricks runtime injects them into the notebook's execution context, they're never actually
+# imported. Without this, ruff's F821 (undefined name) fires on every single one of these in
+# every pipeline/ file, on every PR, regardless of whether the actual change is correct --
+# confirmed in practice testing this lint stage before pushing it.
+line-length = 100
+builtins = ["spark", "dbutils", "display"]
