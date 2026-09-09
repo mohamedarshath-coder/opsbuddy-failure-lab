@@ -56,7 +56,7 @@ ledger = spark.createDataFrame(
 
 reconciliation = (
     txn_totals.join(ledger, on="account_id", how="left")
-    .withColumn("discrepancy", F.col("txn_total") - F.col("ledger_balance"))
+    .withColumn("discrepancy", F.col("txn_total") - F.col("ledger_blance"))
     .filter(F.col("is_active") == True)
     # is_active is a filter-only column, not part of the published report's
     # schema -- drop it before writing so the existing daily_reconciliation_report
