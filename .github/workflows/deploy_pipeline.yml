@@ -1,0 +1,51 @@
+name: Databricks pipeline CI/CD
+
+# Single-file, sequential pattern: one job per event type instead of two files chained by
+# workflow_run. test-qa reacts to pull_request (validates against the qa schema, never touches
+# prod data); deploy-prod reacts to push on main (only reachable via a human-approved merge).
+# The gate between them isn't a `needs:`/`workflow_run` dependency -- it's GitHub's branch
+# protection on main requiring the "test-qa" check to pass before a merge is even allowed, so a
+# push to main is only ever created by a PR that already passed test-qa.
+on:
+  pull_request:
+    paths:
+      - "pipeline/**"
+      - "databricks.yml"
+      - ".github/workflows/deploy_pipeline.yml"
+  push:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "databricks.yml"
+      - ".github/workflows/deploy_pipeline.yml"
+
+jobs:
+  test-qa:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy bundle to qa target
+        run: databricks bundle deploy -t qa
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      - name: Run Job A (ingestion) against qa schema
+        run: databricks bundle run daily_txn_ingestion -t qa
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      - name: Run Job B (reconciliation) against qa schema
+        run: databricks bundle run daily_revenue_reconciliation -t qa
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+  deploy-prod:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy bundle to prod target
+        run: databricks bundle deploy -t prod
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}

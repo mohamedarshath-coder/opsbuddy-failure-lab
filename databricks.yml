@@ -1,0 +1,75 @@
+bundle:
+  name: opsbuddy-failure-lab-pipeline
+
+# Same cluster the pipeline already runs on manually -- reused here rather than a job_cluster
+# spec, so this bundle doesn't spin up a separate cluster in addition to the existing one.
+variables:
+  cluster_id:
+    default: "0617-093607-afaabl4i"
+  target_schema:
+    description: >-
+      Which schema Job A/Job B read and write. qa target overrides this to "qa" (created
+      specifically for CI so these runs never touch the same tables a real/manual run would);
+      prod target keeps the existing "default" schema unchanged.
+    default: "default"
+
+resources:
+  jobs:
+    daily_txn_ingestion:
+      name: "daily_txn_ingestion_${bundle.target}"
+      tasks:
+        - task_key: ingest_raw_transactions
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./pipeline/00_ingest_raw_transactions.py
+            base_parameters:
+              target_schema: ${var.target_schema}
+
+    daily_revenue_reconciliation:
+      name: "daily_revenue_reconciliation_${bundle.target}"
+      tasks:
+        - task_key: extract_daily_transactions
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./pipeline/01_extract_daily_transactions.py
+            base_parameters:
+              target_schema: ${var.target_schema}
+        - task_key: validate_and_clean_transactions
+          depends_on:
+            - task_key: extract_daily_transactions
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./pipeline/02_validate_and_clean_transactions.py
+            base_parameters:
+              target_schema: ${var.target_schema}
+        - task_key: reconcile_with_ledger
+          depends_on:
+            - task_key: validate_and_clean_transactions
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./pipeline/03_reconcile_with_ledger.py
+            base_parameters:
+              target_schema: ${var.target_schema}
+        - task_key: publish_summary
+          depends_on:
+            - task_key: reconcile_with_ledger
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./pipeline/04_publish_summary.py
+            base_parameters:
+              target_schema: ${var.target_schema}
+
+targets:
+  qa:
+    mode: development
+    variables:
+      target_schema: "qa"
+    workspace:
+      host: https://adb-3750626659891863.3.azuredatabricks.net
+
+  prod:
+    mode: production
+    variables:
+      target_schema: "default"
+    workspace:
+      host: https://adb-3750626659891863.3.azuredatabricks.net
