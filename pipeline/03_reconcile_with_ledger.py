@@ -28,13 +28,13 @@ cleaned = spark.table(f"{target_schema}.daily_txn_clean")
 
 raw_count = spark.table(f"{target_schema}.daily_txn_raw").count()
 clean_count = cleaned.count()
-print(f"Raw: {raw_count} rows, Clean: {clean_count} rows (dropped {raw_count - clean_count})")
+print(
+    f"Raw: {raw_count} rows, Clean: {clean_count} rows (dropped {raw_count - clean_count})"
+)
 
 # COMMAND ----------
 
-txn_totals = cleaned.groupBy("account_id").agg(
-    F.sum("amount").alias("txn_total")
-)
+txn_totals = cleaned.groupBy("account_id").agg(F.sum("amount").alias("txn_total"))
 
 # Synthetic ledger balances -- in a real pipeline this would come from the
 # accounting system's own export. is_active mirrors the accounting system's own
