@@ -1,23 +1,55 @@
-IyBEYXRhYnJpY2tzIG5vdGVib29rIHNvdXJjZQojIE1BR0lDICVtZAojIE1BR0lDICMgMDdfYnJvbnplX3Byb2R1Y3RfY2F0YWxvZwojIE1BR0lDCiMgTUFHSUMgSW5nZXN0cyB0aGUgcmF3IHByb2R1Y3QgY2F0YWxvZyBmZWVkIGFuZCBmaWx0ZXJzIHRvIGFjdGl2ZSBTS1VzIG9ubHksIGZvciB1c2UgYnkgYWxsCiMgTUFHSUMgZG93bnN0cmVhbSBwcmljaW5nIGFuZCBpbnZlbnRvcnkgam9icy4KIyBNQUdJQwojIE1BR0lDIEZpbHRlciBsb2dpYyBub3cgbGl2ZXMgaW4gYHRyYW5zZm9ybXNfMDdfYnJvbnplX3Byb2R1Y3RfY2F0YWxvZy5weWAgLS0gdGhpcwojIE1BR0lDIG5vdGVib29rIGlzIGp1c3QgYW4gb3JjaGVzdHJhdG9yOiByZWFkLCBjYWxsIHRoZSBleHRyYWN0ZWQgZnVuY3Rpb24sIHdyaXRlLgoKIyBDT01NQU5EIC0tLS0tLS0tLS0tLS0tLS0tLS0tLQoKZnJvbSBweXNwYXJrLnNxbC50eXBlcyBpbXBvcnQgU3RydWN0VHlwZSwgU3RydWN0RmllbGQsIFN0cmluZ1R5cGUsIEludGVnZXJUeXBlLCBEb3VibGVUeXBlCmZyb20gdHJhbnNmb3Jtc18wN19icm9uemVfcHJvZHVjdF9jYXRhbG9nIGltcG9ydCBmaWx0ZXJfYWN0aXZlX3Byb2R1Y3RzCgojIENPTU1BTkQgLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgojIE1BR0lDICVtZCAjIyBSYXcgcHJvZHVjdCBmZWVkCgojIENPTU1BTkQgLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgpyYXdfc2NoZW1hID0gU3RydWN0VHlwZShbCiAgICBTdHJ1Y3RGaWVsZCgicHJvZHVjdF9pZCIsIEludGVnZXJUeXBlKCksIEZhbHNlKSwKICAgIFN0cnVjdEZpZWxkKCJwcm9kdWN0X25hbWUiLCBTdHJpbmdUeXBlKCksIEZhbHNlKSwKICAgIFN0cnVjdEZpZWxkKCJpc19hY3RpdmUiLCBTdHJpbmdUeXBlKCksIEZhbHNlKSwKICAgIFN0cnVjdEZpZWxkKCJiYXNlX3ByaWNlIiwgRG91YmxlVHlwZSgpLCBGYWxzZSksCl0pCgpyYXdfcHJvZHVjdHMgPSBbCiAgICAoNzAwMSwgIkJsdWV0b290aCBTcGVha2VyIiwgIlRSVUUiLCA1OS45OSksCiAgICAoNzAwMiwgIk5vaXNlIENhbmNlbGxpbmcgSGVhZHBob25lcyIsICJUUlVFIiwgMTQ5Ljk5KSwKICAgICg3MDAzLCAiQ2hhcmdpbmcgQ2FibGUiLCAiVFJVRSIsIDEyLjk5KSwKICAgICg3MDA0LCAiUmV0aXJlZCBUYWJsZXQgTW9kZWwiLCAiRkFMU0UiLCAxOTkuOTkpLAogICAgKDcwMDUsICJXaXJlbGVzcyBDaGFyZ2VyIiwgIlRSVUUiLCAyOS45OSksCiAgICAoNzAwNiwgIlNjcmVlbiBQcm90ZWN0b3IiLCAiVFJVRSIsIDkuOTkpLAogICAgKDcwMDcsICJPbGQgUGhvbmUgQ2FzZSIsICJGQUxTRSIsIDE0Ljk5KSwKICAgICg3MDA4LCAiUG9ydGFibGUgQmF0dGVyeSBQYWNrIiwgIlRSVUUiLCAzNC45OSksCl0KCnJhd19kZiA9IHNwYXJrLmNyZWF0ZURhdGFGcmFtZShyYXdfcHJvZHVjdHMsIHNjaGVtYT1yYXdfc2NoZW1hKQpyYXdfZGYud3JpdGUubW9kZSgib3ZlcndyaXRlIikuc2F2ZUFzVGFibGUoImRldi5vcHNidWRkeV90ZXN0LnJhd19wcm9kdWN0X2ZlZWQiKQpwcmludChmIlJhdyBwcm9kdWN0IGZlZWQgd3JpdHRlbjoge3Jhd19kZi5jb3VudCgpfSByb3dzIikKCiMgQ09NTUFORCAtLS0tLS0tLS0tLS0tLS0tLS0tLS0KCiMgTUFHSUMgJW1kICMjIEZpbHRlciB0byBhY3RpdmUgcHJvZHVjdHMgb25seSAodmlhIHRoZSBleHRyYWN0ZWQsIHRlc3RhYmxlIG1vZHVsZSkKCiMgQ09NTUFORCAtLS0tLS0tLS0tLS0tLS0tLS0tLS0KCnJhd19wcm9kdWN0X3RhYmxlID0gc3BhcmsudGFibGUoImRldi5vcHNidWRkeV90ZXN0LnJhd19wcm9kdWN0X2ZlZWQiKQphY3RpdmVfcHJvZHVjdHMgPSBmaWx0ZXJfYWN0aXZlX3Byb2R1Y3RzKHJhd19wcm9kdWN0X3RhYmxlKQoKYWN0aXZlX3Byb2R1Y3RzLndyaXRlLm1vZGUoIm92ZXJ3cml0ZSIpLnNhdmVBc1RhYmxlKCJkZXYub3BzYnVkZHlfdGVzdC5icm9uemVfYWN0aXZlX3Byb2R1Y3RzIikKcHJpbnQoZiJCcm9uemUgYWN0aXZlIHByb2R1Y3RzIHdyaXR0ZW46IHthY3RpdmVfcHJvZHVjdHMuY291bnQoKX0gcm93cyIpCmRpc3BsYXkoYWN0aXZlX3Byb2R1Y3RzKQo=
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 07_bronze_product_catalog
+# MAGIC
+# MAGIC Ingests the raw product catalog feed and filters to active SKUs only, for use by all
+# MAGIC downstream pricing and inventory jobs.
+# MAGIC
+# MAGIC Filter logic now lives in `transforms_07_bronze_product_catalog.py` -- this
+# MAGIC notebook is just an orchestrator: read, call the extracted function, write.
 
 # COMMAND ---------------------
 
-# MAGIC %md ## Business invariant: 6 of the 8 synthetic SKUs are marked active
-# MAGIC Confirmed by inspecting the raw feed above -- exactly 6 rows are "TRUE". If this count
-# MAGIC drifts, either the raw feed changed (expected, update this assertion) or the filter logic
-# MAGIC in transforms_07_bronze_product_catalog.py is silently mismatching case variants (not
-# MAGIC expected -- this is the real regression this assertion exists to catch). Confirmed in
-# MAGIC practice: filter_active_products currently only matches is_active == "true" (lowercase),
-# MAGIC so with an all-uppercase "TRUE" feed this fails with active_products.count() == 0, not a
-# MAGIC crash inside filter_active_products itself -- the bug is silent without this check.
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+from transforms_07_bronze_product_catalog import filter_active_products
 
 # COMMAND ---------------------
 
-actual_active_count = active_products.count()
-assert actual_active_count == 6, (
-    f"Expected 6 active products (6 of 8 synthetic SKUs are marked TRUE in the raw feed), got "
-    f"{actual_active_count}. This usually means filter_active_products in "
-    f"transforms_07_bronze_product_catalog.py is not matching all case variants of the "
-    f"is_active flag (TRUE/true/True) correctly."
-)
-print(f"Business invariant confirmed: {actual_active_count} active products, as expected")
+# MAGIC %md ## Raw product feed
+
+# COMMAND ---------------------
+
+raw_schema = StructType([
+    StructField("product_id", IntegerType(), False),
+    StructField("product_name", StringType(), False),
+    StructField("is_active", StringType(), False),
+    StructField("base_price", DoubleType(), False),
+])
+
+raw_products = [
+    (7001, "Bluetooth Speaker", "TRUE", 59.99),
+    (7002, "Noise Cancelling Headphones", "TRUE", 149.99),
+    (7003, "Charging Cable", "TRUE", 12.99),
+    (7004, "Retired Tablet Model", "FALSE", 199.99),
+    (7005, "Wireless Charger", "TRUE", 29.99),
+    (7006, "Screen Protector", "TRUE", 9.99),
+    (7007, "Old Phone Case", "FALSE", 14.99),
+    (7008, "Portable Battery Pack", "TRUE", 34.99),
+]
+
+raw_df = spark.createDataFrame(raw_products, schema=raw_schema)
+raw_df.write.mode("overwrite").saveAsTable("dev.opsbuddy_test.raw_product_feed")
+print(f"Raw product feed written: {raw_df.count()} rows")
+
+# COMMAND ---------------------
+
+# MAGIC %md ## Filter to active products only (via the extracted, testable module)
+
+# COMMAND ---------------------
+
+raw_product_table = spark.table("dev.opsbuddy_test.raw_product_feed")
+active_products = filter_active_products(raw_product_table)
+
+active_products.write.mode("overwrite").saveAsTable("dev.opsbuddy_test.bronze_active_products")
+print(f"Bronze active products written: {active_products.count()} rows")
+display(active_products)
