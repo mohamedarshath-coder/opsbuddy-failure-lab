@@ -66,6 +66,16 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    late_fee_region_cap:
+      name: "late_fee_region_cap_${bundle.target}"
+      tasks:
+        - task_key: assess_late_fees
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/15_shared_module_bug_late_fee_region_cap.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     daily_revenue_reconciliation:
       name: "daily_revenue_reconciliation_${bundle.target}"
       tasks:
