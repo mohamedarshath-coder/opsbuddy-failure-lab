@@ -9,6 +9,23 @@
 # COMMAND ----------
 
 from pyspark.sql import functions as F
+import sys, os
+
+# Dynamically resolve the repo root onto sys.path -- needed when this notebook runs as part of
+# a Databricks Asset Bundle deployment (workspace path like .../.bundle/<name>/<target>/files/
+# notebooks/11_...), where the repo root is NOT automatically on sys.path the way it is for a
+# job whose task Source is a direct Git-provider link. Confirmed necessary in practice: this
+# exact notebook worked fine as a git-linked job (repo root on sys.path automatically) but threw
+# "ModuleNotFoundError: No module named 'notebooks'" the first time it ran as a bundle job --
+# computed dynamically here (not hardcoded) so it keeps working regardless of which workspace
+# path a future bundle/target/deployment actually lands this notebook at.
+_notebook_path = (
+    dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+)
+_repo_root = "/Workspace" + os.path.dirname(os.path.dirname(_notebook_path))
+if _repo_root not in sys.path:
+    sys.path.append(_repo_root)
+
 from notebooks.common.discrepancy_rules import is_high_risk
 
 dbutils.widgets.text("target_schema", "default")
