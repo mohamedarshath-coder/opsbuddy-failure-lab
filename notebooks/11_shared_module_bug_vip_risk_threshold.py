@@ -11,6 +11,9 @@
 from pyspark.sql import functions as F
 from notebooks.common.discrepancy_rules import is_high_risk
 
+dbutils.widgets.text("target_schema", "default")
+target_schema = dbutils.widgets.get("target_schema")
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -42,7 +45,7 @@ snapshot = spark.createDataFrame(
 # COMMAND ----------
 
 flagged = snapshot.filter(F.udf(is_high_risk, "boolean")(F.col("discrepancy")))
-flagged.write.mode("overwrite").saveAsTable("default.high_risk_accounts_demo")
+flagged.write.mode("overwrite").saveAsTable(f"{target_schema}.high_risk_accounts_demo")
 
 vip_flagged_count = flagged.filter(F.col("tier") == "vip").count()
 assert vip_flagged_count == 0, (
