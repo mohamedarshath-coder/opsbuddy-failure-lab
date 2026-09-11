@@ -18,10 +18,9 @@ from pyspark.sql.types import DoubleType
 # COMMAND ----------
 
 # MAGIC %md ## Raw orders feed
-# MAGIC BUG (in the raw data, reflecting a real upstream inconsistency): order O-2004 has
-# MAGIC discount_pct_str = "N/A" instead of a numeric string -- a legitimate "no discount applies"
-# MAGIC signal from the promo system, not malformed data by upstream's own standard, but this
-# MAGIC code never accounted for it.
+# MAGIC Order O-2004 has discount_pct_str = "N/A" instead of a numeric string -- a legitimate
+# MAGIC "no discount applies" signal from the promo system, not malformed data by upstream's own
+# MAGIC standard. The UDF below now accounts for it.
 
 # COMMAND ----------
 
@@ -36,14 +35,18 @@ orders = spark.createDataFrame([
 # COMMAND ----------
 
 # MAGIC %md ## Apply the discount
-# MAGIC BUG: `int(discount_pct_str)` has no handling for a non-numeric value -- crashes with a
-# MAGIC real Python ValueError inside the UDF the moment it hits "N/A", not something that
-# MAGIC degrades gracefully or only fails at a large scale.
+# MAGIC FIX: `int(discount_pct_str)` previously had no handling for a non-numeric value and
+# MAGIC crashed with a Python ValueError the moment it hit "N/A". Non-numeric/blank values (e.g.
+# MAGIC "N/A") are now treated as "no discount applies" (0%) instead of raising, matching the
+# MAGIC promo system's actual real-world signal.
 
 # COMMAND ----------
 
 def apply_discount(order_total, discount_pct_str):
-    discount_pct = int(discount_pct_str)
+    try:
+        discount_pct = int(discount_pct_str)
+    except (TypeError, ValueError):
+        discount_pct = 0
     return order_total * (1 - discount_pct / 100.0)
 
 apply_discount_udf = udf(apply_discount, DoubleType())
