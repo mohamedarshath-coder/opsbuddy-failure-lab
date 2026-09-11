@@ -25,6 +25,16 @@ resources:
             base_parameters:
               target_schema: ${var.target_schema}
 
+    vip_risk_threshold_flagging:
+      name: "vip_risk_threshold_flagging_${bundle.target}"
+      tasks:
+        - task_key: flag_high_risk_accounts
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/11_shared_module_bug_vip_risk_threshold.py
+            base_parameters:
+              target_schema: ${var.target_schema}
+
     daily_revenue_reconciliation:
       name: "daily_revenue_reconciliation_${bundle.target}"
       tasks:

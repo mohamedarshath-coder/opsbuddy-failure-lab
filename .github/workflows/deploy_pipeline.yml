@@ -6,16 +6,27 @@ name: Databricks pipeline CI/CD
 # The gate between them isn't a `needs:`/`workflow_run` dependency -- it's GitHub's branch
 # protection on main requiring the "test-qa" check to pass before a merge is even allowed, so a
 # push to main is only ever created by a PR that already passed test-qa.
+#
+# test-qa dynamically discovers every job defined under databricks.yml's resources.jobs and runs
+# ALL of them against the qa target -- not a hardcoded list of job names. This means any new job
+# added to the bundle (a new notebook scenario, a new pipeline) automatically gets real qa-schema
+# CI coverage with zero changes to this file. Confirmed necessary in practice: the first version
+# of this workflow hardcoded "Run Job A" / "Run Job B" as separate steps, which meant every new
+# bundle job silently got NO CI coverage at all unless someone remembered to add a matching step
+# here by hand -- exactly the gap that let notebooks/** scenarios ship with no qa-schema proof
+# for a long time after pipeline/ already had one.
 on:
   pull_request:
     paths:
       - "pipeline/**"
+      - "notebooks/**"
       - "databricks.yml"
       - ".github/workflows/deploy_pipeline.yml"
   push:
     branches: [main]
     paths:
       - "pipeline/**"
+      - "notebooks/**"
       - "databricks.yml"
       - ".github/workflows/deploy_pipeline.yml"
 
@@ -30,12 +41,36 @@ jobs:
         run: databricks bundle deploy -t qa
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      - name: Run Job A (ingestion) against qa schema
-        run: databricks bundle run daily_txn_ingestion -t qa
-        env:
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      - name: Run Job B (reconciliation) against qa schema
-        run: databricks bundle run daily_revenue_reconciliation -t qa
+      - name: Run every bundle job against the qa schema
+        run: |
+          set -euo pipefail
+          # Extract top-level keys under resources.jobs from databricks.yml -- no PyYAML
+          # dependency needed, this file's structure is simple/stable enough for a targeted grep:
+          # each job key is a line indented exactly 4 spaces immediately under "  jobs:", ending
+          # in ":", not a "task_key:"/"notebook_task:"/etc nested field (those are indented 6+).
+          job_keys=$(awk '
+            /^  jobs:/ { in_jobs=1; next }
+            in_jobs && /^  [a-zA-Z]/ { in_jobs=0 }
+            in_jobs && /^    [a-zA-Z_][a-zA-Z0-9_]*:$/ { gsub(/:$/, "", $1); print $1 }
+          ' databricks.yml)
+          echo "Discovered bundle jobs: $job_keys"
+          if [ -z "$job_keys" ]; then
+            echo "::error::No jobs discovered under resources.jobs in databricks.yml -- refusing to silently pass with zero qa coverage"
+            exit 1
+          fi
+          failures=0
+          for job in $job_keys; do
+            echo "::group::Running $job against qa schema"
+            if ! databricks bundle run "$job" -t qa; then
+              echo "::error::$job failed against qa schema"
+              failures=$((failures + 1))
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::$failures bundle job(s) failed against qa -- see grouped logs above"
+            exit 1
+          fi
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
 
