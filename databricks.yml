@@ -14,11 +14,14 @@ variables:
     default: "default"
   bronze_target_schema:
     description: >-
-      Which catalog.schema bronze_product_catalog reads and writes (raw_product_feed,
-      bronze_active_products). Distinct variable from target_schema because this job's real
-      default is a fully-qualified "dev.opsbuddy_test", not a bare schema name under an implicit
-      catalog like the pipeline jobs use. qa target overrides this to "dev.opsbuddy_test_qa" so
-      CI runs never touch the real dev.opsbuddy_test tables.
+      Which catalog.schema reads/writes for any job using the "dev.opsbuddy_test" demo
+      convention (bronze_product_catalog's raw_product_feed/bronze_active_products,
+      customer_balance_merge_duplicate's customer_balances) -- distinct from target_schema
+      because these jobs use a fully-qualified catalog.schema, not a bare schema name under an
+      implicit catalog like the pipeline jobs use. qa target overrides this to
+      "dev.opsbuddy_test_qa" so CI runs never touch the real dev.opsbuddy_test tables. Shared
+      across these jobs deliberately, not one variable per job -- they all genuinely use the
+      same demo catalog/schema convention.
     default: "dev.opsbuddy_test"
 
 resources:
@@ -50,6 +53,16 @@ resources:
           existing_cluster_id: ${var.cluster_id}
           notebook_task:
             notebook_path: ./07_bronze_product_catalog.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    customer_balance_merge_duplicate:
+      name: "customer_balance_merge_duplicate_${bundle.target}"
+      tasks:
+        - task_key: upsert_customer_balances
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/13_delta_merge_duplicate_match.py
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
