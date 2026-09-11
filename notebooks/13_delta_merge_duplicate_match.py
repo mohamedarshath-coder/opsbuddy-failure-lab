@@ -12,6 +12,7 @@
 # COMMAND ----------
 
 from pyspark.sql import Row
+from pyspark.sql import functions as F
 
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
 target_schema = dbutils.widgets.get("target_schema")
@@ -32,7 +33,7 @@ balances.write.mode("overwrite").saveAsTable(f"{target_schema}.customer_balances
 # COMMAND ----------
 
 # MAGIC %md ## Today's incremental balance-change feed
-# MAGIC BUG: C1002 appears TWICE in today's feed -- a real, common cause in production: the
+# MAGIC C1002 appears TWICE in today's feed -- a real, common cause in production: the
 # MAGIC upstream system retried a delivery after a timeout without checking whether the first
 # MAGIC attempt actually succeeded, landing the same customer's change twice in one batch.
 
@@ -41,16 +42,33 @@ balances.write.mode("overwrite").saveAsTable(f"{target_schema}.customer_balances
 balance_changes = spark.createDataFrame([
     Row(customer_id="C1001", change_amount=50.00),
     Row(customer_id="C1002", change_amount=-100.00),
-    Row(customer_id="C1002", change_amount=-100.00),  # duplicate -- the real bug
+    Row(customer_id="C1002", change_amount=-100.00),  # duplicate retry of the same change
     Row(customer_id="C1003", change_amount=10.00),
 ])
-balance_changes.createOrReplaceTempView("balance_changes")
+
+# COMMAND ----------
+
+# MAGIC %md ## Deduplicate the feed before merging
+# MAGIC Delta's `MERGE INTO` allows at most one matching source row per target row. Pre-aggregate
+# MAGIC the feed by `customer_id` (summing `change_amount`) so duplicate/retried rows for the same
+# MAGIC customer collapse into a single net change before the MERGE ever sees them. This also
+# MAGIC correctly nets out legitimate cases where a customer has more than one real change in the
+# MAGIC same batch, rather than arbitrarily keeping or dropping one row.
+
+# COMMAND ----------
+
+balance_changes_deduped = (
+    balance_changes
+    .groupBy("customer_id")
+    .agg(F.sum("change_amount").alias("change_amount"))
+)
+balance_changes_deduped.createOrReplaceTempView("balance_changes")
 
 # COMMAND ----------
 
 # MAGIC %md ## Upsert via MERGE INTO
-# MAGIC This is where it fails: Delta requires at most one matching source row per target row --
-# MAGIC "multiple source rows matched" is not a data-quality warning, it's a hard MERGE error.
+# MAGIC With the source pre-aggregated to at most one row per `customer_id`, the MERGE below no
+# MAGIC longer hits the "multiple source rows matched" ambiguity.
 
 # COMMAND ----------
 
