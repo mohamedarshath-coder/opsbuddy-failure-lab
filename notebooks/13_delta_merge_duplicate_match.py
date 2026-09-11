@@ -13,6 +13,9 @@
 
 from pyspark.sql import Row
 
+dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
+target_schema = dbutils.widgets.get("target_schema")
+
 # COMMAND ----------
 
 # MAGIC %md ## Existing customer balances (the MERGE target)
@@ -24,7 +27,7 @@ balances = spark.createDataFrame([
     Row(customer_id="C1002", balance=1200.50),
     Row(customer_id="C1003", balance=75.25),
 ])
-balances.write.mode("overwrite").saveAsTable("dev.opsbuddy_test.customer_balances")
+balances.write.mode("overwrite").saveAsTable(f"{target_schema}.customer_balances")
 
 # COMMAND ----------
 
@@ -51,8 +54,8 @@ balance_changes.createOrReplaceTempView("balance_changes")
 
 # COMMAND ----------
 
-spark.sql("""
-    MERGE INTO dev.opsbuddy_test.customer_balances AS target
+spark.sql(f"""
+    MERGE INTO {target_schema}.customer_balances AS target
     USING balance_changes AS source
     ON target.customer_id = source.customer_id
     WHEN MATCHED THEN UPDATE SET target.balance = target.balance + source.change_amount
