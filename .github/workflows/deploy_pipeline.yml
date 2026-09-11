@@ -7,14 +7,16 @@ name: Databricks pipeline CI/CD
 # protection on main requiring the "test-qa" check to pass before a merge is even allowed, so a
 # push to main is only ever created by a PR that already passed test-qa.
 #
-# test-qa dynamically discovers every job defined under databricks.yml's resources.jobs and runs
-# ALL of them against the qa target -- not a hardcoded list of job names. This means any new job
-# added to the bundle (a new notebook scenario, a new pipeline) automatically gets real qa-schema
-# CI coverage with zero changes to this file. Confirmed necessary in practice: the first version
-# of this workflow hardcoded "Run Job A" / "Run Job B" as separate steps, which meant every new
-# bundle job silently got NO CI coverage at all unless someone remembered to add a matching step
-# here by hand -- exactly the gap that let notebooks/** scenarios ship with no qa-schema proof
-# for a long time after pipeline/ already had one.
+# test-qa runs ONLY the bundle jobs a PR actually affects (see .github/scripts/select_qa_jobs.py)
+# -- not every job in the bundle unconditionally. Confirmed live as a real, necessary fix: an
+# earlier version ran every bundle job on every PR touching pipeline/**/notebooks/**, which meant
+# a PR fixing notebooks/14_malformed_numeric_udf_crash.py (not itself in the bundle at all) still
+# failed test-qa, because it re-ran vip_risk_threshold_flagging -- a different, already-broken
+# job in the bundle -- and reported that unrelated failure as if it were about this PR's change.
+# select_qa_jobs.py fixes this with real dependency awareness (exact notebook match, plus a
+# specific rule for shared "common/" modules), not just "run everything" or "run nothing based on
+# top-level directory" (an intermediate version of that script was tested and confirmed wrong
+# before this one shipped -- see the script's own docstring for why).
 on:
   pull_request:
     paths:
@@ -22,6 +24,7 @@ on:
       - "notebooks/**"
       - "databricks.yml"
       - ".github/workflows/deploy_pipeline.yml"
+      - ".github/scripts/select_qa_jobs.py"
   push:
     branches: [main]
     paths:
@@ -29,6 +32,7 @@ on:
       - "notebooks/**"
       - "databricks.yml"
       - ".github/workflows/deploy_pipeline.yml"
+      - ".github/scripts/select_qa_jobs.py"
 
 jobs:
   test-qa:
@@ -36,43 +40,61 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history needed so `git diff base...head` in select_qa_jobs.py can actually
+          # resolve both ends -- the default shallow checkout only fetches the merge commit.
+          fetch-depth: 0
       - uses: databricks/setup-cli@main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PyYAML
+        run: pip install pyyaml
       - name: Deploy bundle to qa target
         run: databricks bundle deploy -t qa
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      - name: Run every bundle job against the qa schema
+      - name: Select which bundle jobs this PR actually affects
+        id: select
         run: |
           set -euo pipefail
-          # Extract top-level keys under resources.jobs from databricks.yml -- no PyYAML
-          # dependency needed, this file's structure is simple/stable enough for a targeted grep:
-          # each job key is a line indented exactly 4 spaces immediately under "  jobs:", ending
-          # in ":", not a "task_key:"/"notebook_task:"/etc nested field (those are indented 6+).
-          job_keys=$(awk '
-            /^  jobs:/ { in_jobs=1; next }
-            in_jobs && /^  [a-zA-Z]/ { in_jobs=0 }
-            in_jobs && /^    [a-zA-Z_][a-zA-Z0-9_]*:$/ { gsub(/:$/, "", $1); print $1 }
-          ' databricks.yml)
-          echo "Discovered bundle jobs: $job_keys"
-          if [ -z "$job_keys" ]; then
-            echo "::error::No jobs discovered under resources.jobs in databricks.yml -- refusing to silently pass with zero qa coverage"
-            exit 1
-          fi
+          jobs=$(python .github/scripts/select_qa_jobs.py \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}")
+          echo "Selected jobs:"
+          echo "$jobs"
+          # Multi-line output via the delimiter form -- a plain "jobs=$jobs" would break on
+          # more than one selected job, since GITHUB_OUTPUT only supports single-line values
+          # without this form.
+          {
+            echo "jobs<<QA_JOBS_EOF"
+            echo "$jobs"
+            echo "QA_JOBS_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run each affected bundle job against the qa schema
+        if: steps.select.outputs.jobs != ''
+        run: |
+          set -euo pipefail
           failures=0
-          for job in $job_keys; do
+          while IFS= read -r job; do
+            [ -z "$job" ] && continue
             echo "::group::Running $job against qa schema"
             if ! databricks bundle run "$job" -t qa; then
               echo "::error::$job failed against qa schema"
               failures=$((failures + 1))
             fi
             echo "::endgroup::"
-          done
+          done <<< "${{ steps.select.outputs.jobs }}"
           if [ "$failures" -gt 0 ]; then
             echo "::error::$failures bundle job(s) failed against qa -- see grouped logs above"
             exit 1
           fi
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      - name: No affected bundle jobs -- nothing to qa-test for this PR
+        if: steps.select.outputs.jobs == ''
+        run: echo "No bundle job depends on any file this PR changed -- test-qa passes trivially."
 
   deploy-prod:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
