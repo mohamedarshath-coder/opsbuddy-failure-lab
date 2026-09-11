@@ -53,3 +53,22 @@ active_products = filter_active_products(raw_product_table)
 active_products.write.mode("overwrite").saveAsTable("dev.opsbuddy_test.bronze_active_products")
 print(f"Bronze active products written: {active_products.count()} rows")
 display(active_products)
+
+
+# COMMAND ---------------------
+
+# MAGIC %md ## Business invariant: 6 of the 8 synthetic SKUs are marked active
+# MAGIC Confirmed by inspecting the raw feed above -- exactly 6 rows are "TRUE". If this count
+# MAGIC drifts, either the raw feed changed (expected, update this assertion) or the filter logic
+# MAGIC in transforms_07_bronze_product_catalog.py is silently mismatching case variants (not
+# MAGIC expected -- this is the real regression this assertion exists to catch).
+
+# COMMAND ---------------------
+
+actual_active_count = active_products.count()
+assert actual_active_count == 6, (
+    f"Expected 6 active products (6 of 8 synthetic SKUs are TRUE in the raw feed), got "
+    f"{actual_active_count}. filter_active_products in transforms_07_bronze_product_catalog.py "
+    f"is likely not matching all case variants of the is_active flag correctly."
+)
+print(f"Business invariant confirmed: {actual_active_count} active products, as expected")
