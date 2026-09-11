@@ -65,7 +65,7 @@ overdue_accounts = spark.createDataFrame(
 
 calculate_late_fee_udf = F.udf(calculate_late_fee, "double")
 assessed = overdue_accounts.withColumn(
-    "late_fee", calculate_late_fee_udf(F.col("days_overdue"))
+    "late_fee", calculate_late_fee_udf(F.col("days_overdue"), F.col("region"))
 )
 assessed.write.mode("overwrite").saveAsTable(f"{target_schema}.late_fee_assessments_demo")
 
