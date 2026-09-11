@@ -12,6 +12,14 @@ variables:
       specifically for CI so these runs never touch the same tables a real/manual run would);
       prod target keeps the existing "default" schema unchanged.
     default: "default"
+  bronze_target_schema:
+    description: >-
+      Which catalog.schema bronze_product_catalog reads and writes (raw_product_feed,
+      bronze_active_products). Distinct variable from target_schema because this job's real
+      default is a fully-qualified "dev.opsbuddy_test", not a bare schema name under an implicit
+      catalog like the pipeline jobs use. qa target overrides this to "dev.opsbuddy_test_qa" so
+      CI runs never touch the real dev.opsbuddy_test tables.
+    default: "dev.opsbuddy_test"
 
 resources:
   jobs:
@@ -34,6 +42,16 @@ resources:
             notebook_path: ./notebooks/11_shared_module_bug_vip_risk_threshold.py
             base_parameters:
               target_schema: ${var.target_schema}
+
+    bronze_product_catalog:
+      name: "bronze_product_catalog_${bundle.target}"
+      tasks:
+        - task_key: build_bronze_product_catalog
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./07_bronze_product_catalog.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
 
     daily_revenue_reconciliation:
       name: "daily_revenue_reconciliation_${bundle.target}"
@@ -74,6 +92,7 @@ targets:
     mode: development
     variables:
       target_schema: "qa"
+      bronze_target_schema: "dev.opsbuddy_test_qa"
     workspace:
       host: https://adb-3750626659891863.3.azuredatabricks.net
       root_path: /Workspace/Users/mohamed.arshath@latentviewo365.onmicrosoft.com/.bundle/${bundle.name}/${bundle.target}
@@ -82,6 +101,7 @@ targets:
     mode: production
     variables:
       target_schema: "default"
+      bronze_target_schema: "dev.opsbuddy_test"
     workspace:
       host: https://adb-3750626659891863.3.azuredatabricks.net
       # required for any target with mode: production, so exactly one copy of the bundle is
