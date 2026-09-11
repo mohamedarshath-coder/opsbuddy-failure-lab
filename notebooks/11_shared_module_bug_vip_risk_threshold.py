@@ -9,6 +9,7 @@
 # COMMAND ----------
 
 from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType
 import sys, os
 
 # Dynamically resolve the repo root onto sys.path -- needed when this notebook runs as part of
@@ -61,7 +62,8 @@ snapshot = spark.createDataFrame(
 
 # COMMAND ----------
 
-flagged = snapshot.filter(F.udf(is_high_risk, "boolean")(F.col("discrepancy")))
+is_high_risk_udf = F.udf(is_high_risk, BooleanType())
+flagged = snapshot.filter(is_high_risk_udf(F.col("discrepancy"), F.col("tier")))
 flagged.write.mode("overwrite").saveAsTable(f"{target_schema}.high_risk_accounts_demo")
 
 vip_flagged_count = flagged.filter(F.col("tier") == "vip").count()
