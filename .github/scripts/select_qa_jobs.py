@@ -9,33 +9,45 @@ test-qa to fail, because it re-ran vip_risk_threshold_flagging (a genuinely brok
 also in the bundle) and reported that failure as if it were about the actual PR's change. Running
 only the jobs whose files this PR actually touched fixes that false-negative.
 
-SELECTION RULE -- exact-file match, plus one specific rule for shared modules, NOT whole-
-directory grouping. An earlier version of this script grouped by top-level directory (e.g. any
-"notebooks/**" change selects every job with a notebook under "notebooks/") -- confirmed WRONG
-before it ever shipped: tested directly against the real PR #31 scenario
-(notebooks/14_malformed_numeric_udf_crash.py changed) and it still incorrectly selected
-vip_risk_threshold_flagging, reproducing the exact false failure this script exists to fix,
-because both files happen to share the same top-level "notebooks" directory despite having
-nothing to do with each other. The actual rule needed is narrower:
+SELECTION RULE -- exact-file match, PLUS each job's own notebook source is actually parsed for
+real local import statements, resolved to real repo files. Two earlier, narrower versions of this
+rule were tried and confirmed wrong before this one shipped:
 
-  1. Exact match -- the changed file IS one of the job's own notebook_path values.
-  2. Shared-module match -- the changed file lives under a directory literally named "common"
-     (e.g. "notebooks/common/discrepancy_rules.py"), AND that "common" directory shares the same
-     top-level parent as the job's own notebook_path (e.g. both under "notebooks/"). This is
-     deliberately narrow to the "common/" convention this repo already uses for shared modules
-     (see notebooks/common/discrepancy_rules.py, imported by
-     notebooks/11_shared_module_bug_vip_risk_threshold.py) -- not "same top-level directory" in
-     general, which is what caused the false positive above.
+  1. Whole-directory grouping (any "notebooks/**" change selects every job with a notebook under
+     "notebooks/") -- confirmed wrong against the real PR #31 scenario
+     (notebooks/14_malformed_numeric_udf_crash.py changed): it still incorrectly selected
+     vip_risk_threshold_flagging, reproducing the exact false failure this script exists to fix,
+     because both files happen to share the same top-level "notebooks" directory despite having
+     nothing to do with each other.
+  2. A hardcoded "common/" folder special-case (only files under a directory literally named
+     "common" count as shared dependencies) -- this correctly caught
+     notebooks/common/discrepancy_rules.py, but is blind to a plain same-directory import like
+     transforms_07_bronze_product_catalog.py (imported by 07_bronze_product_catalog.py, no
+     "common/" involved at all) -- confirmed a real gap when bronze_product_catalog was added to
+     the bundle, not hypothetical.
+
+Real import parsing (this version) generalizes both of the above correctly and doesn't need a
+new special case for the next shared-file pattern this repo invents: it reads each job's own
+notebook source, extracts `import X` / `from X import ...` lines, resolves X to a candidate repo
+file (dots -> slashes, + ".py"), and includes it in that job's dependency set ONLY if that file
+actually exists in the repo -- which is what naturally excludes stdlib/pyspark/third-party
+imports (foo.py never exists locally for those) without needing an explicit blocklist.
 
 If databricks.yml itself changed, ALL jobs are selected unconditionally -- a structural change to
 the bundle (a renamed job, a new task, a changed parameter) isn't safely scoped by file identity
 at all, so this falls back to full coverage rather than guessing which jobs are actually affected.
 """
 
+import os
+import re
 import subprocess
 import sys
 
 import yaml
+
+_IMPORT_PATTERN = re.compile(
+    r"^\s*(?:from\s+([\w.]+)\s+import\s+|import\s+([\w.]+))", re.MULTILINE
+)
 
 
 def normalize(path: str) -> str:
@@ -44,24 +56,36 @@ def normalize(path: str) -> str:
     return path[2:] if path.startswith("./") else path
 
 
-def top_level_dir(path: str) -> str:
-    parts = normalize(path).split("/")
-    return parts[0] if parts else path
+def resolve_local_imports(notebook_path: str, repo_root: str = ".") -> set:
+    """Read `notebook_path`'s real source and return the set of repo-relative .py files it
+    actually imports locally -- e.g. 'from notebooks.common.discrepancy_rules import X' inside
+    notebooks/11_....py resolves to {'notebooks/common/discrepancy_rules.py'} because that file
+    genuinely exists in the repo; 'from pyspark.sql import functions' does NOT resolve to
+    anything, because 'pyspark/sql.py' does not exist locally -- that's what filters out
+    stdlib/third-party imports without an explicit blocklist. Returns an empty set (not an
+    error) if the notebook file itself can't be read -- a missing/renamed file is a real problem
+    but not this function's job to report."""
+    full_path = os.path.join(repo_root, normalize(notebook_path))
+    try:
+        with open(full_path, "r", encoding="utf-8") as f:
+            source = f.read()
+    except OSError:
+        return set()
+
+    resolved = set()
+    for match in _IMPORT_PATTERN.finditer(source):
+        module = match.group(1) or match.group(2)
+        if not module:
+            continue
+        candidate = module.replace(".", "/") + ".py"
+        if os.path.isfile(os.path.join(repo_root, candidate)):
+            resolved.add(candidate)
+    return resolved
 
 
-def is_under_common(path: str) -> bool:
-    """True for any path with a directory literally named 'common' in it, e.g.
-    'notebooks/common/discrepancy_rules.py' -- this repo's actual convention for a shared module
-    imported by more than one notebook (see notebooks/common/discrepancy_rules.py, imported by
-    notebooks/11_shared_module_bug_vip_risk_threshold.py). Deliberately specific to this naming
-    convention, not "anything else in the same top-level folder" -- see the module docstring for
-    why that broader rule was tried and confirmed wrong."""
-    return "common" in normalize(path).split("/")[:-1]
-
-
-def load_jobs(databricks_yml_path: str) -> dict:
-    """job_name -> set of that job's own notebook_path values (normalized, exact paths -- not
-    directories)."""
+def load_jobs(databricks_yml_path: str, repo_root: str = ".") -> dict:
+    """job_name -> set of files this job actually depends on: its own notebook_path values,
+    plus every real local import each of those notebooks resolves to."""
     with open(databricks_yml_path, "r", encoding="utf-8") as f:
         spec = yaml.safe_load(f)
     jobs = {}
@@ -71,22 +95,11 @@ def load_jobs(databricks_yml_path: str) -> dict:
             notebook_task = task.get("notebook_task") or {}
             path = notebook_task.get("notebook_path")
             if path:
-                paths.add(normalize(path))
+                path = normalize(path)
+                paths.add(path)
+                paths |= resolve_local_imports(path, repo_root)
         jobs[job_name] = paths
     return jobs
-
-
-def job_is_affected(job_notebook_paths: set, changed_file: str) -> bool:
-    """Rule 1: exact match. Rule 2: changed_file is a shared 'common' module under the same
-    top-level directory as one of this job's own notebooks."""
-    changed_file = normalize(changed_file)
-    if changed_file in job_notebook_paths:
-        return True
-    if is_under_common(changed_file):
-        changed_top = top_level_dir(changed_file)
-        if any(top_level_dir(p) == changed_top for p in job_notebook_paths):
-            return True
-    return False
 
 
 def changed_files(base_ref: str, head_ref: str) -> list:
@@ -107,6 +120,8 @@ def main():
     if not jobs:
         print("::error::No jobs found under resources.jobs in databricks.yml", file=sys.stderr)
         sys.exit(1)
+    for job_name, deps in jobs.items():
+        print(f"  {job_name} depends on: {sorted(deps)}", file=sys.stderr)
 
     files = changed_files(base_ref, head_ref)
     print(f"Changed files: {files}", file=sys.stderr)
@@ -114,15 +129,14 @@ def main():
     if "databricks.yml" in files:
         print(
             "databricks.yml itself changed -- running ALL bundle jobs "
-            "(structural change, not safely scoped by directory)",
+            "(structural change, not safely scoped by file identity)",
             file=sys.stderr,
         )
         selected = sorted(jobs.keys())
     else:
+        changed = {normalize(f) for f in files}
         selected = sorted(
-            job_name
-            for job_name, notebook_paths in jobs.items()
-            if any(job_is_affected(notebook_paths, f) for f in files)
+            job_name for job_name, deps in jobs.items() if deps & changed
         )
 
     if not selected:
