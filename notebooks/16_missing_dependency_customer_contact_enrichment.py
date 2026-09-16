@@ -9,13 +9,21 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install phonenumbers
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
 target_schema = dbutils.widgets.get("target_schema")
 
 # COMMAND ----------
 
 from pyspark.sql import functions as F
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 # COMMAND ----------
 
@@ -23,11 +31,13 @@ from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
 # COMMAND ----------
 
-contact_schema = StructType([
-    StructField("customer_id", IntegerType(), False),
-    StructField("raw_phone", StringType(), False),
-    StructField("country_code", StringType(), False),
-])
+contact_schema = StructType(
+    [
+        StructField("customer_id", IntegerType(), False),
+        StructField("raw_phone", StringType(), False),
+        StructField("country_code", StringType(), False),
+    ]
+)
 
 bronze_contacts = [
     (201, "9876543210", "IN"),
@@ -38,7 +48,9 @@ bronze_contacts = [
 ]
 
 bronze_df = spark.createDataFrame(bronze_contacts, schema=contact_schema)
-bronze_df.write.mode("overwrite").saveAsTable(f"{target_schema}.bronze_customer_contacts")
+bronze_df.write.mode("overwrite").saveAsTable(
+    f"{target_schema}.bronze_customer_contacts"
+)
 print(f"Bronze contacts written: {bronze_df.count()} rows")
 
 # COMMAND ----------
@@ -69,12 +81,13 @@ def format_e164(raw_phone: str, country_code: str) -> str:
 
 format_udf = F.udf(format_e164, StringType())
 
-silver_df = (
-    spark.table(f"{target_schema}.bronze_customer_contacts")
-    .withColumn("formatted_phone", format_udf(F.col("raw_phone"), F.col("country_code")))
+silver_df = spark.table(f"{target_schema}.bronze_customer_contacts").withColumn(
+    "formatted_phone", format_udf(F.col("raw_phone"), F.col("country_code"))
 )
 
-silver_df.write.mode("overwrite").saveAsTable(f"{target_schema}.silver_customer_contacts")
+silver_df.write.mode("overwrite").saveAsTable(
+    f"{target_schema}.silver_customer_contacts"
+)
 print(f"Silver contacts written: {silver_df.count()} rows")
 display(silver_df)
 
@@ -91,4 +104,6 @@ assert null_count == 0, f"{null_count} customer contact(s) failed to format to E
 total = result.count()
 assert total == 5, f"Expected 5 formatted contacts, got {total}"
 
-print(f"customer_contact_enrichment completed successfully -- {total} contacts formatted, 0 failures.")
+print(
+    f"customer_contact_enrichment completed successfully -- {total} contacts formatted, 0 failures."
+)
