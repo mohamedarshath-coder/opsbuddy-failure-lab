@@ -76,6 +76,16 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    customer_contact_enrichment:
+      name: "customer_contact_enrichment_${bundle.target}"
+      tasks:
+        - task_key: enrich_customer_contacts
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/16_missing_dependency_customer_contact_enrichment.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     daily_revenue_reconciliation:
       name: "daily_revenue_reconciliation_${bundle.target}"
       tasks:
