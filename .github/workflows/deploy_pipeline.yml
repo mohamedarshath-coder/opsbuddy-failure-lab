@@ -101,8 +101,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so select_qa_jobs.py can diff the previous main head against this push.
+          fetch-depth: 0
       - uses: databricks/setup-cli@main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PyYAML
+        run: pip install pyyaml
       - name: Deploy bundle to prod target
         run: databricks bundle deploy -t prod
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      # Deploying only updates the job definitions. Running the jobs this push affected makes the
+      # release's data change happen inside this run, so the run's start and end bound the release
+      # (DataSakshi reads the Delta versions written during the production deploy run).
+      - name: Select which bundle jobs this push affects
+        id: select
+        run: |
+          set -euo pipefail
+          jobs=$(python .github/scripts/select_qa_jobs.py \
+            "${{ github.event.before }}" \
+            "${{ github.sha }}")
+          echo "Selected jobs:"
+          echo "$jobs"
+          {
+            echo "jobs<<PROD_JOBS_EOF"
+            echo "$jobs"
+            echo "PROD_JOBS_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run each affected bundle job on the prod target
+        if: steps.select.outputs.jobs != ''
+        run: |
+          set -euo pipefail
+          while IFS= read -r job; do
+            [ -z "$job" ] && continue
+            echo "::group::Running $job on prod"
+            databricks bundle run "$job" -t prod
+            echo "::endgroup::"
+          done <<< "${{ steps.select.outputs.jobs }}"
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      - name: No affected bundle jobs
+        if: steps.select.outputs.jobs == ''
+        run: echo "No bundle job depends on any file this push changed -- nothing to run on prod."
