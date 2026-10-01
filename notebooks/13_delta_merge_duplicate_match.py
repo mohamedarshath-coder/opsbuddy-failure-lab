@@ -28,7 +28,32 @@ balances = spark.createDataFrame([
     Row(customer_id="C1002", balance=1200.50),
     Row(customer_id="C1003", balance=75.25),
 ])
-balances.write.mode("overwrite").saveAsTable(f"{target_schema}.customer_balances")
+
+# COMMAND ----------
+
+# MAGIC %md ## Add each customer's region (SCRUM-128)
+# MAGIC Regions come from the customer-regions reference, which keeps history: a customer who
+# MAGIC moved has one row per region they were in, with `is_current` marking today's region.
+
+# COMMAND ----------
+
+customer_regions = spark.createDataFrame([
+    Row(customer_id="C1001", region="North", is_current=True),
+    Row(customer_id="C1002", region="North", is_current=False),  # moved in March
+    Row(customer_id="C1002", region="South", is_current=True),
+    Row(customer_id="C1003", region="West", is_current=True),
+])
+
+balances_with_region = balances.join(
+    customer_regions.select("customer_id", "region"),
+    on="customer_id",
+    how="left",
+)
+(
+    balances_with_region.write.mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{target_schema}.customer_balances")
+)
 
 # COMMAND ----------
 
