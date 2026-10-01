@@ -1,0 +1,45 @@
+# Data rollback: restore one Delta table to an earlier version (TDD rollback
+# runbook). Run by hand from the Actions tab, or by DataSakshi after a failed
+# required post-prod check. Uses the deploy principal's token, never an agent's.
+name: Rollback a table
+
+on:
+  workflow_dispatch:
+    inputs:
+      table:
+        description: "Table to restore, catalog.schema.table"
+        required: true
+      version:
+        description: "Delta version to restore to (from the DGR rollback plan)"
+        required: true
+      warehouse_id:
+        description: "SQL warehouse that runs the RESTORE"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: databricks/setup-cli@main
+      - name: Restore the table
+        env:
+          DATABRICKS_HOST: https://adb-3750626659891863.3.azuredatabricks.net
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          TABLE: ${{ inputs.table }}
+          VERSION: ${{ inputs.version }}
+          WAREHOUSE: ${{ inputs.warehouse_id }}
+        run: |
+          set -euo pipefail
+          # Inputs go into SQL, so accept only plain names and a number.
+          [[ "$TABLE" =~ ^[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$ ]] || { echo "::error::bad table name"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+$ ]] || { echo "::error::version must be a number"; exit 1; }
+          [[ "$WAREHOUSE" =~ ^[A-Za-z0-9]+$ ]] || { echo "::error::bad warehouse id"; exit 1; }
+          body=$(printf '{"warehouse_id":"%s","statement":"RESTORE TABLE %s TO VERSION AS OF %s","wait_timeout":"50s"}' "$WAREHOUSE" "$TABLE" "$VERSION")
+          result=$(databricks api post /api/2.0/sql/statements --json "$body")
+          echo "$result"
+          state=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['status']['state'])")
+          [ "$state" = "SUCCEEDED" ] || { echo "::error::RESTORE ended in state $state"; exit 1; }
+          echo "Restored $TABLE to version $VERSION"

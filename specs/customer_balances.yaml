@@ -1,0 +1,27 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). "dev" is the logical catalog; DataSakshi maps it to
+# the real catalog per phase in Settings -> Repo setup.
+table: dev.opsbuddy_test.customer_balances
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: customer_id, type: string}
+      - {name: balance, type: double}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_customer
+    type: uniqueness
+    columns: [customer_id]
+    phases: [branch, uat, postprod]
+  - id: customer_id_not_null
+    type: null_rate
+    column: customer_id
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_customer, customer_id_not_null]
