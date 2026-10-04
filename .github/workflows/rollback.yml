@@ -15,6 +15,10 @@ on:
       warehouse_id:
         description: "SQL warehouse that runs the RESTORE"
         required: true
+      source:
+        description: "Optional pre-deploy copy to restore from (DataSakshi D93); blank uses time travel"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -31,15 +35,31 @@ jobs:
           TABLE: ${{ inputs.table }}
           VERSION: ${{ inputs.version }}
           WAREHOUSE: ${{ inputs.warehouse_id }}
+          SOURCE: ${{ inputs.source }}
         run: |
           set -euo pipefail
           # Inputs go into SQL, so accept only plain names and a number.
           [[ "$TABLE" =~ ^[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$ ]] || { echo "::error::bad table name"; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+$ ]] || { echo "::error::version must be a number"; exit 1; }
           [[ "$WAREHOUSE" =~ ^[A-Za-z0-9]+$ ]] || { echo "::error::bad warehouse id"; exit 1; }
-          body=$(printf '{"warehouse_id":"%s","statement":"RESTORE TABLE %s TO VERSION AS OF %s","wait_timeout":"50s"}' "$WAREHOUSE" "$TABLE" "$VERSION")
+          if [ -n "$SOURCE" ]; then
+            # The copy has its own files: no time travel, no retention limit.
+            [[ "$SOURCE" =~ ^[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$ ]] || { echo "::error::bad source name"; exit 1; }
+            statement="CREATE OR REPLACE TABLE $TABLE DEEP CLONE $SOURCE"
+          else
+            statement="RESTORE TABLE $TABLE TO VERSION AS OF $VERSION"
+          fi
+          body=$(printf '{"warehouse_id":"%s","statement":"%s","wait_timeout":"50s"}' "$WAREHOUSE" "$statement")
           result=$(databricks api post /api/2.0/sql/statements --json "$body")
-          echo "$result"
           state=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['status']['state'])")
+          id=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['statement_id'])")
+          # A large table takes longer than one wait: poll until it ends (up to 1 hour).
+          for _ in $(seq 1 720); do
+            case "$state" in PENDING|RUNNING) ;; *) break ;; esac
+            sleep 5
+            result=$(databricks api get "/api/2.0/sql/statements/$id")
+            state=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['status']['state'])")
+          done
+          echo "$result"
           [ "$state" = "SUCCEEDED" ] || { echo "::error::RESTORE ended in state $state"; exit 1; }
-          echo "Restored $TABLE to version $VERSION"
+          echo "Restored $TABLE to version $VERSION${SOURCE:+ from $SOURCE}"
