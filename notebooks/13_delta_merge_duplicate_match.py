@@ -28,7 +28,42 @@ balances = spark.createDataFrame([
     Row(customer_id="C1002", balance=1200.50),
     Row(customer_id="C1003", balance=75.25),
 ])
-balances.write.mode("overwrite").saveAsTable(f"{target_schema}.customer_balances")
+
+# COMMAND ----------
+
+# MAGIC %md ## Add each customer's current region (SCRUM-130)
+# MAGIC Regions come from the customer-regions reference, which keeps history: a customer who
+# MAGIC moved has one row per region they were in, with `is_current` marking today's region.
+# MAGIC Only the current row is joined, so the join keeps exactly one row per customer
+# MAGIC (SCRUM-128 joined every history row and duplicated C1002). A customer with more than
+# MAGIC one current region is a reference-data error: the job stops instead of writing duplicates.
+
+# COMMAND ----------
+
+customer_regions = spark.createDataFrame([
+    Row(customer_id="C1001", region="North", is_current=True),
+    Row(customer_id="C1002", region="North", is_current=False),  # moved in March
+    Row(customer_id="C1002", region="South", is_current=True),
+    Row(customer_id="C1003", region="West", is_current=True),
+])
+
+current_regions = customer_regions.filter(F.col("is_current")).select("customer_id", "region")
+conflicts = current_regions.groupBy("customer_id").count().filter(F.col("count") > 1).collect()
+if conflicts:
+    raise ValueError(
+        "customer-regions reference has more than one current region for: "
+        + ", ".join(sorted(r["customer_id"] for r in conflicts))
+    )
+
+# A left join keeps every customer; one without a current region gets a null region.
+balances_with_region = balances.join(current_regions, on="customer_id", how="left")
+if balances_with_region.count() != balances.count():
+    raise ValueError("adding regions changed the number of customers")
+(
+    balances_with_region.write.mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{target_schema}.customer_balances")
+)
 
 # COMMAND ----------
 
