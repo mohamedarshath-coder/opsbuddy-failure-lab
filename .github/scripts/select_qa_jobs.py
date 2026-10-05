@@ -102,6 +102,39 @@ def load_jobs(databricks_yml_path: str, repo_root: str = ".") -> dict:
     return jobs
 
 
+def yml_at(ref: str) -> dict | None:
+    """databricks.yml as it was at `ref` (None if it did not exist or cannot be read)."""
+    result = subprocess.run(
+        ["git", "show", f"{ref}:databricks.yml"], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return yaml.safe_load(result.stdout) or {}
+    except yaml.YAMLError:
+        return None
+
+
+def jobs_changed_in_yml(base_ref: str, head_ref: str):
+    """When databricks.yml changed: the set of jobs whose own definition is new or different,
+    or None when anything outside resources.jobs changed (variables, targets, bundle, includes),
+    which may affect every job and so needs full coverage. Comparing parsed YAML means comments
+    and formatting never select a job."""
+    before, after = yml_at(base_ref), yml_at(head_ref)
+    if before is None or after is None:
+        return None
+    def outside(spec):
+        rest = dict(spec)
+        resources = dict(rest.pop("resources", {}) or {})
+        resources.pop("jobs", None)
+        return rest, resources
+    if outside(before) != outside(after):
+        return None
+    old = (before.get("resources", {}) or {}).get("jobs", {}) or {}
+    new = (after.get("resources", {}) or {}).get("jobs", {}) or {}
+    return {name for name, job in new.items() if old.get(name) != job}
+
+
 def changed_files(base_ref: str, head_ref: str) -> list:
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base_ref}...{head_ref}"],
@@ -126,18 +159,23 @@ def main():
     files = changed_files(base_ref, head_ref)
     print(f"Changed files: {files}", file=sys.stderr)
 
+    changed = {normalize(f) for f in files}
+    by_files = {job_name for job_name, deps in jobs.items() if deps & changed}
     if "databricks.yml" in files:
-        print(
-            "databricks.yml itself changed -- running ALL bundle jobs "
-            "(structural change, not safely scoped by file identity)",
-            file=sys.stderr,
-        )
-        selected = sorted(jobs.keys())
+        by_yml = jobs_changed_in_yml(base_ref, head_ref)
+        if by_yml is None:
+            print(
+                "databricks.yml changed outside resources.jobs -- running ALL bundle jobs "
+                "(structural change, not safely scoped by file identity)",
+                file=sys.stderr,
+            )
+            selected = sorted(jobs.keys())
+        else:
+            print(f"databricks.yml changed these job definitions: {sorted(by_yml)}",
+                  file=sys.stderr)
+            selected = sorted((by_files | by_yml) & set(jobs))
     else:
-        changed = {normalize(f) for f in files}
-        selected = sorted(
-            job_name for job_name, deps in jobs.items() if deps & changed
-        )
+        selected = sorted(by_files)
 
     if not selected:
         print(

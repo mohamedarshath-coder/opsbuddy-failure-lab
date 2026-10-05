@@ -66,6 +66,16 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    customer_country_pipeline:
+      name: "customer_country_pipeline_${bundle.target}"
+      tasks:
+        - task_key: build_customer_country_tables
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/30_customer_country_pipeline.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:
