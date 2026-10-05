@@ -1,0 +1,132 @@
+# DataSakshi coding agent: one stage run (plan, code, rework, code review) on a
+# fresh GitHub-hosted machine that is deleted after the job. Started only by
+# DataSakshi (or by hand from the Actions tab) with a request DataSakshi built.
+# Every input is checked, the agent step has no git credentials, the monitor is
+# always taken from main, and only a code stage's last step pushes, and only to
+# feature/<ticket>. The run title carries the run id DataSakshi looks for.
+name: DataSakshi agent
+run-name: "DataSakshi agent ${{ inputs.ticket }} ${{ inputs.stage }} ${{ inputs.run_id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: "Jira ticket key, e.g. SCRUM-131"
+        required: true
+      stage:
+        description: "plan, code, rework-review, rework-uat or code-review"
+        required: true
+      run_id:
+        description: "DataSakshi run id (12 hex characters)"
+        required: true
+      branch:
+        description: "feature/<ticket>"
+        required: true
+      max_minutes:
+        description: "Time limit for the agent, in minutes"
+        required: true
+      max_turns:
+        description: "Turn limit for the agent"
+        required: true
+      payload:
+        description: "The stage request from DataSakshi (gzip + base64)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: datasakshi-agent-${{ inputs.ticket }}
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write  # used only by the push step, never by the agent
+    env:
+      TICKET: ${{ inputs.ticket }}
+      STAGE: ${{ inputs.stage }}
+      RUN_ID: ${{ inputs.run_id }}
+      BRANCH: ${{ inputs.branch }}
+      MAX_MINUTES: ${{ inputs.max_minutes }}
+      MAX_TURNS: ${{ inputs.max_turns }}
+      OUT_DIR: ${{ runner.temp }}/datasakshi
+      PAYLOAD_FILE: ${{ runner.temp }}/payload.b64
+    steps:
+      - name: Check the request
+        env:
+          PAYLOAD: ${{ inputs.payload }}
+        run: |
+          set -euo pipefail
+          [[ "$TICKET" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]] || { echo "::error::bad ticket key"; exit 1; }
+          case "$STAGE" in plan|code|rework-review|rework-uat|code-review) ;; *) echo "::error::bad stage"; exit 1;; esac
+          [[ "$RUN_ID" =~ ^[0-9a-f]{12}$ ]] || { echo "::error::bad run id"; exit 1; }
+          [ "$BRANCH" = "feature/$TICKET" ] || { echo "::error::branch must be feature/$TICKET"; exit 1; }
+          [[ "$MAX_MINUTES" =~ ^[0-9]{1,3}$ ]] && [ "$MAX_MINUTES" -ge 1 ] && [ "$MAX_MINUTES" -le 100 ] || { echo "::error::bad time limit"; exit 1; }
+          [[ "$MAX_TURNS" =~ ^[0-9]{1,3}$ ]] && [ "$MAX_TURNS" -ge 1 ] || { echo "::error::bad turn limit"; exit 1; }
+          [[ "$PAYLOAD" =~ ^[A-Za-z0-9+/=]+$ ]] || { echo "::error::bad payload"; exit 1; }
+          mkdir -p "$OUT_DIR"
+          printf '%s' "$PAYLOAD" > "$PAYLOAD_FILE"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use the ticket branch, then drop git credentials
+        run: |
+          set -euo pipefail
+          if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+          else
+            git checkout -B "$BRANCH" origin/main
+          fi
+          # The monitor always comes from main, never from the branch it runs on.
+          git show origin/main:.github/scripts/agent_monitor.py > "$RUNNER_TEMP/agent_monitor.py"
+          git config user.name "DataSakshi agent"
+          git config user.email "datasakshi-agent@users.noreply.github.com"
+          # The agent step must not be able to push: remove the checkout token.
+          git config --local --unset-all "http.https://github.com/.extraheader" || true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.289
+
+      - name: Run the agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 "$RUNNER_TEMP/agent_monitor.py"
+
+      - name: Push the branch (code stages only)
+        if: success() && (inputs.stage == 'code' || inputs.stage == 'rework-review' || inputs.stage == 'rework-uat')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$(cat "$OUT_DIR/status" 2>/dev/null)" != "committed" ]; then
+            echo "Nothing to push: the stage did not end committed."
+            exit 0
+          fi
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+
+      - name: Keep the transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: datasakshi-agent-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/datasakshi/transcript.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Report to DataSakshi
+        if: always()
+        run: |
+          if [ -s "$OUT_DIR/report.b64" ]; then
+            echo "DATASAKSHI_RESULT_B64=$(cat "$OUT_DIR/report.b64")"
+          else
+            echo "DATASAKSHI_RESULT_B64=$(printf '{"result":null,"usage_by_message":{},"stop":null,"error":"the agent did not run (an earlier step failed)"}' | gzip -n | base64 -w0)"
+          fi
