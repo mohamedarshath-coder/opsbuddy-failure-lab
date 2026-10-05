@@ -101,15 +101,30 @@ loan_payments.write.mode("overwrite").option("overwriteSchema", "true").saveAsTa
 # COMMAND ----------
 
 # MAGIC %md ## 4. Daily summary for collections (settled payments only)
+# MAGIC Collections also wants the loan product on each line, from the product history kept by
+# MAGIC the loan servicing system (an account can be moved to another product, e.g. refinanced).
 
 # COMMAND ----------
+
+loan_account_products = spark.createDataFrame([
+    Row(account_id="LN1001", product="personal", is_current=True),
+    Row(account_id="LN1002", product="auto", is_current=True),
+    Row(account_id="LN1003", product="home", is_current=False),  # refinanced in August
+    Row(account_id="LN1003", product="home_refinance", is_current=True),
+    Row(account_id="LN1004", product="personal", is_current=True),
+    Row(account_id="LN1005", product="auto", is_current=True),
+    Row(account_id="LN1006", product="home", is_current=True),
+    Row(account_id="LN1007", product="personal", is_current=True),
+    Row(account_id="LN1008", product="auto", is_current=True),
+])
 
 payments = spark.table(f"{target_schema}.loan_payments")
 accounts = spark.table(f"{target_schema}.loan_accounts")
 loan_daily_summary = (
     payments.filter(F.col("status") == "settled")
     .join(accounts.select("account_id", "region"), on="account_id", how="inner")
-    .groupBy("paid_on", "region")
+    .join(loan_account_products.select("account_id", "product"), on="account_id", how="inner")
+    .groupBy("paid_on", "region", "product")
     .agg(
         F.count("*").alias("payments_count"),
         F.sum("amount").cast("decimal(14,2)").alias("settled_amount"),
