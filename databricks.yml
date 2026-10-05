@@ -69,10 +69,27 @@ resources:
     customer_country_pipeline:
       name: "customer_country_pipeline_${bundle.target}"
       tasks:
-        - task_key: build_customer_country_tables
+        # Parent first; each child runs only after the table it reads is rebuilt.
+        - task_key: cc_customers
           existing_cluster_id: ${var.cluster_id}
           notebook_task:
-            notebook_path: ./notebooks/30_customer_country_pipeline.py
+            notebook_path: ./notebooks/31_cc_customers.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+        - task_key: cc_orders
+          depends_on:
+            - task_key: cc_customers
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/32_cc_orders.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+        - task_key: cc_revenue_by_country
+          depends_on:
+            - task_key: cc_orders
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/33_cc_revenue_by_country.py
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
