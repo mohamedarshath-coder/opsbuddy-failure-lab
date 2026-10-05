@@ -1,0 +1,16 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). "dev" is the logical catalog; DataSakshi maps it to
+# the real catalog per phase in Settings -> Repo setup.
+table: dev.opsbuddy_test.loan_payments_raw
+version: 1
+checks:
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: payment_id_not_null
+    type: null_rate
+    column: payment_id
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [not_empty, payment_id_not_null]

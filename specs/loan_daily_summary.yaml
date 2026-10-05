@@ -1,0 +1,29 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). "dev" is the logical catalog; DataSakshi maps it to
+# the real catalog per phase in Settings -> Repo setup.
+table: dev.opsbuddy_test.loan_daily_summary
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: paid_on, type: date}
+      - {name: region, type: string}
+      - {name: payments_count, type: bigint}
+      - {name: settled_amount, type: "decimal(14,2)"}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_day_and_region
+    type: uniqueness
+    columns: [paid_on, region]
+    phases: [branch, uat, postprod]
+  - id: settled_amount_not_null
+    type: null_rate
+    column: settled_amount
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_day_and_region, settled_amount_not_null]
