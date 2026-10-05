@@ -87,6 +87,8 @@ jobs:
           fi
           # The monitor always comes from main, never from the branch it runs on.
           git show origin/main:.github/scripts/agent_monitor.py > "$RUNNER_TEMP/agent_monitor.py"
+          # Where the agent starts: the push step compares its commits with this.
+          echo "START_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           git config user.name "DataSakshi agent"
           git config user.email "datasakshi-agent@users.noreply.github.com"
           # The agent step must not be able to push: remove the checkout token.
@@ -113,6 +115,21 @@ jobs:
           if [ "$(cat "$OUT_DIR/status" 2>/dev/null)" != "committed" ]; then
             echo "Nothing to push: the stage did not end committed."
             exit 0
+          fi
+          if [ "$(git rev-parse HEAD)" = "$START_SHA" ]; then
+            echo "::error::the agent reported committed but made no commit"
+            exit 1
+          fi
+          # Tracked files only: untracked leftovers (e.g. __pycache__) are never pushed.
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            echo "::error::the agent left uncommitted changes; nothing is pushed"
+            exit 1
+          fi
+          # Workflows and check specs are governed on main; the agent may not change them.
+          governed=$(git diff --name-only "$START_SHA" HEAD -- .github specs)
+          if [ -n "$governed" ]; then
+            echo "::error::the agent changed governed files: $governed"
+            exit 1
           fi
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
 
