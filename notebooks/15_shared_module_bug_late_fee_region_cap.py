@@ -30,7 +30,7 @@ if _repo_root and _repo_root not in sys.path:
     sys.path.append(_repo_root)
 
 from pyspark.sql import functions as F
-from notebooks.common.late_fee_rules import calculate_late_fee
+from notebooks.common.late_fee_rules import calculate_late_fee, DOMESTIC_CAP, INTERNATIONAL_CAP
 
 dbutils.widgets.text("target_schema", "default")
 target_schema = dbutils.widgets.get("target_schema")
@@ -67,9 +67,19 @@ calculate_late_fee_udf = F.udf(calculate_late_fee, "double")
 assessed = overdue_accounts.withColumn(
     "late_fee", calculate_late_fee_udf(F.col("days_overdue"), F.col("region"))
 )
-assessed.write.mode("overwrite").saveAsTable(f"{target_schema}.late_fee_assessments_demo")
+region_cap = F.when(F.col("region") == "international", F.lit(INTERNATIONAL_CAP)).otherwise(
+    F.lit(DOMESTIC_CAP)
+)
+assessed = assessed.withColumn("fee_capped", F.col("late_fee") == region_cap)
+assessed.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+    f"{target_schema}.late_fee_assessments_demo"
+)
 
-INTERNATIONAL_CAP = 50.0
+assert assessed.filter(F.col("fee_capped").isNull()).count() == 0, "fee_capped must not be null"
+assert (
+    assessed.filter(F.col("fee_capped") != (F.col("late_fee") == region_cap)).count() == 0
+), "fee_capped must be true exactly when late_fee equals the region cap"
+
 max_international_fee = (
     assessed.filter(F.col("region") == "international")
     .agg(F.max("late_fee"))
