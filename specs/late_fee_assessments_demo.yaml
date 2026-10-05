@@ -1,0 +1,33 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). "dev" is the logical catalog; DataSakshi maps it to
+# the real catalog per phase in Settings -> Repo setup.
+table: dev.opsbuddy_test.late_fee_assessments_demo
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: account_id, type: string}
+      - {name: region, type: string}
+      - {name: late_fee, type: double}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_account
+    type: uniqueness
+    columns: [account_id]
+    phases: [branch, uat, postprod]
+  - id: account_id_not_null
+    type: null_rate
+    column: account_id
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: late_fee_not_null
+    type: null_rate
+    column: late_fee
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_account, account_id_not_null, late_fee_not_null]
