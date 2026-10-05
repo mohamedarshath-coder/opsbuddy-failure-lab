@@ -45,6 +45,7 @@ customer_regions = spark.createDataFrame([
     Row(customer_id="C1002", region="North", is_current=False),  # moved in March
     Row(customer_id="C1002", region="South", is_current=True),
     Row(customer_id="C1003", region="West", is_current=True),
+    Row(customer_id="C1004", region="East", is_current=True),  # new customer, only in the feed
 ])
 
 current_regions = customer_regions.filter(F.col("is_current")).select("customer_id", "region")
@@ -79,6 +80,7 @@ balance_changes = spark.createDataFrame([
     Row(customer_id="C1002", change_amount=-100.00),
     Row(customer_id="C1002", change_amount=-100.00),  # duplicate retry of the same change
     Row(customer_id="C1003", change_amount=10.00),
+    Row(customer_id="C1004", change_amount=30.00),  # new customer, not yet in customer_balances
 ])
 
 # COMMAND ----------
@@ -97,7 +99,13 @@ balance_changes_deduped = (
     .groupBy("customer_id")
     .agg(F.sum("change_amount").alias("change_amount"))
 )
-balance_changes_deduped.createOrReplaceTempView("balance_changes")
+
+# SCRUM-132: give each feed customer their current region so new customers are inserted with it.
+# current_regions has one row per customer (checked above), so this join keeps the row count.
+balance_changes_with_region = balance_changes_deduped.join(current_regions, on="customer_id", how="left")
+if balance_changes_with_region.count() != balance_changes_deduped.count():
+    raise ValueError("adding regions changed the number of feed rows")
+balance_changes_with_region.createOrReplaceTempView("balance_changes")
 
 # COMMAND ----------
 
@@ -112,7 +120,7 @@ spark.sql(f"""
     USING balance_changes AS source
     ON target.customer_id = source.customer_id
     WHEN MATCHED THEN UPDATE SET target.balance = target.balance + source.change_amount
-    WHEN NOT MATCHED THEN INSERT (customer_id, balance) VALUES (source.customer_id, source.change_amount)
+    WHEN NOT MATCHED THEN INSERT (customer_id, balance, region) VALUES (source.customer_id, source.change_amount, source.region)
 """)
 
 print("Balance upsert complete")
