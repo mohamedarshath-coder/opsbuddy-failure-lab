@@ -1,0 +1,35 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). "dev" is the logical catalog; DataSakshi maps it to
+# the real catalog per phase in Settings -> Repo setup. Country must be an
+# ISO 3166-1 alpha-3 code.
+table: dev.opsbuddy_test.cc_orders
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: order_id, type: string}
+      - {name: customer_id, type: string}
+      - {name: amount, type: "decimal(12,2)"}
+      - {name: country, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_order
+    type: uniqueness
+    columns: [order_id]
+    phases: [branch, uat, postprod]
+  - id: customer_id_not_null
+    type: null_rate
+    column: customer_id
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: country_is_iso_code
+    type: accepted_values
+    column: country
+    values: [USA, CAN, MEX, BRA, ARG, GBR, IRL, FRA, DEU, ESP, ITA, NLD, CHE, SWE, IND, CHN, JPN, KOR, SGP, ARE, SAU, ZAF, NGA, EGY, AUS, NZL]
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_order, customer_id_not_null, country_is_iso_code]
