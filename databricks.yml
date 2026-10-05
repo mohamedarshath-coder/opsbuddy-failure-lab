@@ -66,6 +66,16 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    loan_payments_pipeline:
+      name: "loan_payments_pipeline_${bundle.target}"
+      tasks:
+        - task_key: build_loan_tables
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/20_loan_payments_pipeline.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:
