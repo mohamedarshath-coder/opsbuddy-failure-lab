@@ -94,6 +94,24 @@ jobs:
           # The agent step must not be able to push: remove the checkout token.
           git config --local --unset-all "http.https://github.com/.extraheader" || true
 
+      # DataSakshi D103: the agent and the guard run the repo's unit tests here.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install the unit test tools
+        run: |
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; else echo "no requirements-dev.txt"; fi
+          # The guard always comes from main, never from the branch it checks.
+          if git cat-file -e origin/main:.github/scripts/unit_test_guard.py 2>/dev/null; then
+            git show origin/main:.github/scripts/unit_test_guard.py > "$RUNNER_TEMP/unit_test_guard.py"
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -131,6 +149,12 @@ jobs:
             echo "::error::the agent changed governed files: $governed"
             exit 1
           fi
+          # Unit tests (D103): the guard runs them itself; a failure stops the push.
+          if [ -f "$RUNNER_TEMP/unit_test_guard.py" ]; then
+            python "$RUNNER_TEMP/unit_test_guard.py"
+          else
+            echo "No unit test guard on main yet: pushing without it."
+          fi
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
 
       - name: Keep the transcript
@@ -145,6 +169,18 @@ jobs:
       - name: Report to DataSakshi
         if: always()
         run: |
+          if [ -s "$OUT_DIR/report.b64" ] && [ -s "$OUT_DIR/unit_tests.json" ]; then
+            # Add the guard's own unit test result (D103) to the agent's report.
+            python - <<'PY'
+          import base64, gzip, json, os
+          out = os.environ["OUT_DIR"]
+          path = os.path.join(out, "report.b64")
+          report = json.loads(gzip.decompress(base64.b64decode(open(path).read())))
+          report["unit_tests"] = json.load(open(os.path.join(out, "unit_tests.json")))
+          raw = json.dumps(report, separators=(",", ":")).encode()
+          open(path, "w").write(base64.b64encode(gzip.compress(raw, mtime=0)).decode())
+          PY
+          fi
           if [ -s "$OUT_DIR/report.b64" ]; then
             echo "DATASAKSHI_RESULT_B64=$(cat "$OUT_DIR/report.b64")"
           else
