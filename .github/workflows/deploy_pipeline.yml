@@ -25,6 +25,13 @@ on:
       - "databricks.yml"
       - ".github/workflows/deploy_pipeline.yml"
       - ".github/scripts/select_qa_jobs.py"
+      # DataSakshi D103: anything the unit tests read or are made of. Without these a
+      # PR changing only tests, root-level logic modules or specs never ran the tests.
+      - "tests/**"
+      - "pytest.ini"
+      - "requirements-dev.txt"
+      - "*.py"
+      - "specs/**"
   push:
     branches: [main]
     paths:
@@ -33,6 +40,13 @@ on:
       - "databricks.yml"
       - ".github/workflows/deploy_pipeline.yml"
       - ".github/scripts/select_qa_jobs.py"
+      # DataSakshi D103: anything the unit tests read or are made of. Without these a
+      # PR changing only tests, root-level logic modules or specs never ran the tests.
+      - "tests/**"
+      - "pytest.ini"
+      - "requirements-dev.txt"
+      - "*.py"
+      - "specs/**"
 
 jobs:
   test-qa:
