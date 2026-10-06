@@ -3,7 +3,7 @@
 # MAGIC # Customer Country Pipeline · 3 of 3 · Revenue by country (child of orders)
 # MAGIC Builds `cc_revenue_by_country` for the regional sales report: revenue and order count
 # MAGIC per `country` of `cc_orders`. Runs after notebook 32.
-# MAGIC Today one country is split across rows, one per spelling (USA alone has several).
+# MAGIC Orders carry ISO alpha-3 country codes, so there is one row per country.
 
 # COMMAND ----------
 
@@ -38,4 +38,5 @@ orders_total = orders.agg(F.sum("amount")).collect()[0][0]
 report_total = report.agg(F.sum("revenue")).collect()[0][0]
 assert report_total == orders_total, f"report totals {report_total} but orders total {orders_total}"
 assert report.agg(F.sum("orders_count")).collect()[0][0] == orders.count(), "order count mismatch"
+assert report.count() == report.select("country").distinct().count(), "more than one row per country"
 print(f"cc_revenue_by_country: {report.count()} rows, revenue {report_total}")

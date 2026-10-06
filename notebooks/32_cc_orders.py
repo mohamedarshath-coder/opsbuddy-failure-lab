@@ -30,6 +30,7 @@ from decimal import Decimal
 
 from pyspark.sql import functions as F
 
+from notebooks.common.country_iso import ISO3, to_iso3
 from notebooks.common.country_spellings import SPELLINGS
 
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
@@ -51,7 +52,7 @@ for c, spellings in enumerate(SPELLINGS):
                     f"CU{n:03d}",
                     date(2026, 9, 1) + timedelta(days=(n + j * 7) % 30),
                     str(amount),
-                    spellings[(c + k + j + 1) % len(spellings)],
+                    to_iso3(spellings[(c + k + j + 1) % len(spellings)]),
                 )
             )
 cc_orders = spark.createDataFrame(
@@ -73,4 +74,5 @@ orphans = written.join(
 ).count()
 assert orphans == 0, f"{orphans} order(s) have no customer in cc_customers"
 assert written.select("order_id").distinct().count() == len(orders), "duplicate order_id"
+assert written.filter(~F.col("country").isin(ISO3)).count() == 0, "country not an ISO code"
 print(f"cc_orders: {len(orders)} orders, total {written.agg(F.sum('amount')).collect()[0][0]}")
