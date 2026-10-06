@@ -51,6 +51,21 @@ jobs:
           python-version: "3.11"
       - name: Install PyYAML
         run: pip install pyyaml
+      # DataSakshi D103: unit tests first, on this machine, before anything is deployed
+      # to Databricks. Red here means no bundle deploy. CI=true: Spark tests cannot skip.
+      - name: Set up Java for local Spark unit tests
+        if: hashFiles('tests/**/*.py') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Unit tests (no Databricks)
+        if: hashFiles('tests/**/*.py') != ''
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest
+        env:
+          CI: "true"
       - name: Deploy bundle to qa target
         run: databricks bundle deploy -t qa
         env:
@@ -111,6 +126,21 @@ jobs:
           python-version: "3.11"
       - name: Install PyYAML
         run: pip install pyyaml
+      # DataSakshi D103: unit tests first, on this machine, before anything is deployed
+      # to Databricks. Red here means no bundle deploy. CI=true: Spark tests cannot skip.
+      - name: Set up Java for local Spark unit tests
+        if: hashFiles('tests/**/*.py') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Unit tests (no Databricks)
+        if: hashFiles('tests/**/*.py') != ''
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest
+        env:
+          CI: "true"
       - name: Deploy bundle to prod target
         run: databricks bundle deploy -t prod
         env:
