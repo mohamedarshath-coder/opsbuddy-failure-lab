@@ -4,7 +4,7 @@
 # MAGIC Builds `cc2_revenue_by_country` for the regional sales report: per `country` of
 # MAGIC `cc2_orders`, the orders, distinct customers, units, revenue, average order value and
 # MAGIC the first and last order date (8 columns). Runs after notebook 42.
-# MAGIC Today one country is split across rows, one per spelling (USA alone has several).
+# MAGIC `country` is an ISO alpha-3 code, so there is one row per country.
 
 # COMMAND ----------
 
@@ -48,4 +48,6 @@ assert (
     report.agg(F.sum("total_quantity")).collect()[0][0]
     == orders.agg(F.sum("quantity")).collect()[0][0]
 ), "quantity mismatch"
+assert report.filter(~F.col("country").rlike("^[A-Z]{3}$")).count() == 0, "country format"
+assert report.count() == report.select("country").distinct().count(), "country split across rows"
 print(f"cc2_revenue_by_country: {report.count()} rows, revenue {report_total}")

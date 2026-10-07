@@ -3,8 +3,7 @@
 # MAGIC # Customer Country Pipeline v2 · 2 of 3 · Orders (child of customers)
 # MAGIC Builds `cc2_orders` from the order system: one to three orders per customer in
 # MAGIC `cc2_customers`, 8 columns. Each order carries the country the order system recorded,
-# MAGIC spelled independently of the CRM, so a customer's orders may spell its country
-# MAGIC differently. Runs after notebook 41; feeds `cc2_revenue_by_country` (notebook 43).
+# MAGIC spelled independently of the CRM and standardized here to the ISO 3166-1 alpha-3 code. Runs after notebook 41; feeds `cc2_revenue_by_country` (notebook 43).
 
 # COMMAND ----------
 
@@ -30,6 +29,7 @@ from decimal import Decimal
 
 from pyspark.sql import functions as F
 
+from notebooks.common.country_iso import ISO3, to_iso3
 from notebooks.common.country_spellings import SPELLINGS
 
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
@@ -57,7 +57,7 @@ for c, spellings in enumerate(SPELLINGS):
                     1 + (n + j) % 5,
                     str(amount),
                     CHANNELS[(n * 2 + j) % len(CHANNELS)],
-                    spellings[(c + k + j + 1) % len(spellings)],
+                    to_iso3(spellings[(c + k + j + 1) % len(spellings)]),
                 )
             )
 COLUMNS = [
@@ -86,4 +86,6 @@ orphans = written.join(
 ).count()
 assert orphans == 0, f"{orphans} order(s) have no customer in cc2_customers"
 assert written.select("order_id").distinct().count() == len(orders), "duplicate order_id"
+assert written.filter(~F.col("country").isin(ISO3)).count() == 0, "country not an ISO code"
+assert written.filter(~F.col("country").rlike("^[A-Z]{3}$")).count() == 0, "country format"
 print(f"cc2_orders: {len(orders)} orders, total {written.agg(F.sum('amount')).collect()[0][0]}")
