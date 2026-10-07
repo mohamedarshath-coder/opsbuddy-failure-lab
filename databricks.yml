@@ -93,6 +93,34 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    customer_country_pipeline_v2:
+      name: "customer_country_pipeline_v2_${bundle.target}"
+      tasks:
+        # A second, independent copy of the customer country pipeline (cc2_*),
+        # still passing country through as received: the SCRUM-135 problem again.
+        - task_key: cc2_customers
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/41_cc2_customers.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+        - task_key: cc2_orders
+          depends_on:
+            - task_key: cc2_customers
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/42_cc2_orders.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+        - task_key: cc2_revenue_by_country
+          depends_on:
+            - task_key: cc2_orders
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/43_cc2_revenue_by_country.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:
