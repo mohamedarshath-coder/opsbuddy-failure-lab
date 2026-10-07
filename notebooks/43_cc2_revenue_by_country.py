@@ -1,8 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Customer Country Pipeline v2 · 3 of 3 · Revenue by country (child of orders)
-# MAGIC Builds `cc2_revenue_by_country` for the regional sales report: revenue and order count
-# MAGIC per `country` of `cc2_orders`. Runs after notebook 42.
+# MAGIC Builds `cc2_revenue_by_country` for the regional sales report: per `country` of
+# MAGIC `cc2_orders`, the orders, distinct customers, units, revenue, average order value and
+# MAGIC the first and last order date (8 columns). Runs after notebook 42.
 # MAGIC Today one country is split across rows, one per spelling (USA alone has several).
 
 # COMMAND ----------
@@ -19,7 +20,12 @@ cc2_revenue_by_country = (
     .groupBy("country")
     .agg(
         F.count("*").alias("orders_count"),
+        F.countDistinct("customer_id").alias("customers_count"),
+        F.sum("quantity").cast("bigint").alias("total_quantity"),
         F.sum("amount").cast("decimal(14,2)").alias("revenue"),
+        F.round(F.avg("amount"), 2).cast("decimal(12,2)").alias("avg_order_value"),
+        F.min("ordered_on").alias("first_order_on"),
+        F.max("ordered_on").alias("last_order_on"),
     )
 )
 cc2_revenue_by_country.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
@@ -38,4 +44,8 @@ orders_total = orders.agg(F.sum("amount")).collect()[0][0]
 report_total = report.agg(F.sum("revenue")).collect()[0][0]
 assert report_total == orders_total, f"report totals {report_total} but orders total {orders_total}"
 assert report.agg(F.sum("orders_count")).collect()[0][0] == orders.count(), "order count mismatch"
+assert (
+    report.agg(F.sum("total_quantity")).collect()[0][0]
+    == orders.agg(F.sum("quantity")).collect()[0][0]
+), "quantity mismatch"
 print(f"cc2_revenue_by_country: {report.count()} rows, revenue {report_total}")

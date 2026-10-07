@@ -10,7 +10,12 @@ checks:
     columns:
       - {name: customer_id, type: string}
       - {name: customer_name, type: string}
+      - {name: segment, type: string}
       - {name: country, type: string}
+      - {name: city, type: string}
+      - {name: signed_up_on, type: date}
+      - {name: credit_limit, type: "decimal(12,2)"}
+      - {name: is_active, type: boolean}
     allow_extra_columns: true
     phases: [branch, uat, postprod]
   - id: not_empty
@@ -31,4 +36,9 @@ checks:
     column: country
     values: [USA, CAN, MEX, BRA, ARG, GBR, IRL, FRA, DEU, ESP, ITA, NLD, CHE, SWE, IND, CHN, JPN, KOR, SGP, ARE, SAU, ZAF, NGA, EGY, AUS, NZL]
     phases: [branch, uat, postprod]
-required: [not_empty, one_row_per_customer, country_not_null, country_is_iso_code]
+  - id: segment_is_known
+    type: accepted_values
+    column: segment
+    values: [Retail, SMB, Enterprise]
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_customer, country_not_null, country_is_iso_code, segment_is_known]
