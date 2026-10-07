@@ -1,8 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Customer Country Pipeline v2 · 1 of 3 · Customers (parent)
-# MAGIC Builds `cc2_customers`, the customer master from the CRM. `country` is typed by sales
-# MAGIC reps, so the same country arrives in many spellings; it is passed through as received.
+# MAGIC Builds `cc2_customers`, the customer master from the CRM: 52 customers, 8 columns.
+# MAGIC `country` is typed by sales reps, so the same country arrives in many spellings; it is
+# MAGIC passed through as received. Every other column is clean.
 # MAGIC Downstream: `cc2_orders` (notebook 42) and `cc2_revenue_by_country` (notebook 43).
 
 # COMMAND ----------
@@ -25,11 +26,23 @@ if _repo_root not in sys.path:
     sys.path.append(_repo_root)
 
 from datetime import date, timedelta
+from decimal import Decimal
+
+from pyspark.sql import functions as F
 
 from notebooks.common.country_spellings import SPELLINGS
 
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
 target_schema = dbutils.widgets.get("target_schema")
+
+# One main city per country, in the same order as SPELLINGS.
+CITIES = [
+    "New York", "Toronto", "Mexico City", "Sao Paulo", "Buenos Aires", "London", "Dublin",
+    "Paris", "Berlin", "Madrid", "Rome", "Amsterdam", "Zurich", "Stockholm", "Mumbai",
+    "Shanghai", "Tokyo", "Seoul", "Singapore", "Dubai", "Riyadh", "Johannesburg", "Lagos",
+    "Cairo", "Sydney", "Auckland",
+]
+SEGMENTS = ["Retail", "SMB", "Enterprise"]
 
 # COMMAND ----------
 
@@ -45,12 +58,20 @@ for c, spellings in enumerate(SPELLINGS):
             (
                 f"CU{n:03d}",
                 f"Customer {n:03d}",
+                SEGMENTS[n % len(SEGMENTS)],
                 spellings[(c + k) % len(spellings)],
+                CITIES[c],
                 date(2025, 1, 1) + timedelta(days=(n * 11) % 365),
+                str(Decimal(1000 + (n * 250) % 9000)),
+                n % 7 != 0,
             )
         )
-cc2_customers = spark.createDataFrame(
-    customers, ["customer_id", "customer_name", "country", "signed_up_on"]
+COLUMNS = [
+    "customer_id", "customer_name", "segment", "country", "city",
+    "signed_up_on", "credit_limit", "is_active",
+]
+cc2_customers = spark.createDataFrame(customers, COLUMNS).withColumn(
+    "credit_limit", F.col("credit_limit").cast("decimal(12,2)")
 )
 cc2_customers.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
     f"{target_schema}.cc2_customers"
@@ -59,6 +80,7 @@ cc2_customers.write.mode("overwrite").option("overwriteSchema", "true").saveAsTa
 # COMMAND ----------
 
 written = spark.table(f"{target_schema}.cc2_customers")
+assert written.columns == COLUMNS, f"unexpected columns {written.columns}"
 assert written.count() == len(customers), "cc2_customers row count does not match"
 assert written.select("customer_id").distinct().count() == len(customers), "duplicate customer_id"
 print(f"cc2_customers: {len(customers)} customers, {written.select('country').distinct().count()} country values")

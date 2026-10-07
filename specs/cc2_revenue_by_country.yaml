@@ -10,7 +10,12 @@ checks:
     columns:
       - {name: country, type: string}
       - {name: orders_count, type: bigint}
+      - {name: customers_count, type: bigint}
+      - {name: total_quantity, type: bigint}
       - {name: revenue, type: "decimal(14,2)"}
+      - {name: avg_order_value, type: "decimal(12,2)"}
+      - {name: first_order_on, type: date}
+      - {name: last_order_on, type: date}
     allow_extra_columns: true
     phases: [branch, uat, postprod]
   - id: not_empty

@@ -10,7 +10,11 @@ checks:
     columns:
       - {name: order_id, type: string}
       - {name: customer_id, type: string}
+      - {name: ordered_on, type: date}
+      - {name: product_category, type: string}
+      - {name: quantity, type: int}
       - {name: amount, type: "decimal(12,2)"}
+      - {name: channel, type: string}
       - {name: country, type: string}
     allow_extra_columns: true
     phases: [branch, uat, postprod]
@@ -32,4 +36,14 @@ checks:
     column: country
     values: [USA, CAN, MEX, BRA, ARG, GBR, IRL, FRA, DEU, ESP, ITA, NLD, CHE, SWE, IND, CHN, JPN, KOR, SGP, ARE, SAU, ZAF, NGA, EGY, AUS, NZL]
     phases: [branch, uat, postprod]
-required: [not_empty, one_row_per_order, customer_id_not_null, country_is_iso_code]
+  - id: channel_is_known
+    type: accepted_values
+    column: channel
+    values: [Web, Store, Partner]
+    phases: [branch, uat, postprod]
+  - id: product_category_is_known
+    type: accepted_values
+    column: product_category
+    values: [Electronics, Home, Fashion, Grocery, Sports]
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_order, customer_id_not_null, country_is_iso_code, channel_is_known, product_category_is_known]

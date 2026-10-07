@@ -2,9 +2,9 @@
 # MAGIC %md
 # MAGIC # Customer Country Pipeline v2 · 2 of 3 · Orders (child of customers)
 # MAGIC Builds `cc2_orders` from the order system: one to three orders per customer in
-# MAGIC `cc2_customers`. Each order carries the country the order system recorded, spelled
-# MAGIC independently of the CRM, so a customer's orders may spell its country differently.
-# MAGIC Runs after notebook 41; feeds `cc2_revenue_by_country` (notebook 43).
+# MAGIC `cc2_customers`, 8 columns. Each order carries the country the order system recorded,
+# MAGIC spelled independently of the CRM, so a customer's orders may spell its country
+# MAGIC differently. Runs after notebook 41; feeds `cc2_revenue_by_country` (notebook 43).
 
 # COMMAND ----------
 
@@ -35,6 +35,9 @@ from notebooks.common.country_spellings import SPELLINGS
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
 target_schema = dbutils.widgets.get("target_schema")
 
+CATEGORIES = ["Electronics", "Home", "Fashion", "Grocery", "Sports"]
+CHANNELS = ["Web", "Store", "Partner"]
+
 # COMMAND ----------
 
 orders = []
@@ -50,13 +53,22 @@ for c, spellings in enumerate(SPELLINGS):
                     f"OR{order_no:04d}",
                     f"CU{n:03d}",
                     date(2026, 9, 1) + timedelta(days=(n + j * 7) % 30),
+                    CATEGORIES[(n + j) % len(CATEGORIES)],
+                    1 + (n + j) % 5,
                     str(amount),
+                    CHANNELS[(n * 2 + j) % len(CHANNELS)],
                     spellings[(c + k + j + 1) % len(spellings)],
                 )
             )
-cc2_orders = spark.createDataFrame(
-    orders, ["order_id", "customer_id", "ordered_on", "amount", "country"]
-).withColumn("amount", F.col("amount").cast("decimal(12,2)"))
+COLUMNS = [
+    "order_id", "customer_id", "ordered_on", "product_category",
+    "quantity", "amount", "channel", "country",
+]
+cc2_orders = (
+    spark.createDataFrame(orders, COLUMNS)
+    .withColumn("amount", F.col("amount").cast("decimal(12,2)"))
+    .withColumn("quantity", F.col("quantity").cast("int"))
+)
 cc2_orders.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
     f"{target_schema}.cc2_orders"
 )
@@ -68,6 +80,7 @@ cc2_orders.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable
 # COMMAND ----------
 
 written = spark.table(f"{target_schema}.cc2_orders")
+assert written.columns == COLUMNS, f"unexpected columns {written.columns}"
 orphans = written.join(
     spark.table(f"{target_schema}.cc2_customers"), on="customer_id", how="left_anti"
 ).count()
