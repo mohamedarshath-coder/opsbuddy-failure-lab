@@ -11,7 +11,15 @@ The push is refused when:
 - a test was switched off (skip, skipif, xfail added under tests/);
 - a logic module changed (a .py file that is not a Databricks notebook, not a
   test and not under .github/) without its tests/test_<module>.py being added
-  or changed in the same commits, unless the agent gave tests.exempt_reason.
+  or changed in the same commits, unless the agent gave tests.exempt_reason;
+- a Databricks notebook got new code lines (not comments or cell markers)
+  while no test changed: its logic belongs in a module with tests (D110),
+  unless the agent gave tests.exempt_reason.
+
+`--ci` (D110) runs the same checks on any pull request, a developer's too,
+from the PR's base: deleted or switched-off tests fail the check; untested
+logic is a warning there, since a developer has no exemption field. It does not
+run pytest (the workflow's own step does).
 
 A repo without tests/ is not set up for unit tests yet: that is recorded,
 not blocked.
@@ -92,15 +100,33 @@ def check_changes(start: str, out_dir: Path) -> dict:
     switched_off = [line.strip() for line in added_lines if SWITCHED_OFF.search(line)]
     modules = sorted(p for s, p, _ in rows if s in "AMR" and is_logic_module(p))
     untested = [m for m in modules if f"tests/test_{Path(m).stem}.py" not in touched_tests]
-    exempt = agent_exempt_reason(out_dir) if untested else None
+    notebooks = sorted(
+        p for s, p, _ in rows if s in "AMR" and p.endswith(".py") and is_notebook(p)
+        and notebook_code_added(start, p)
+    )  # fmt: skip
+    untested_notebooks = [] if touched_tests else notebooks
+    exempt = agent_exempt_reason(out_dir) if untested or untested_notebooks else None
     return {
         "changed_modules": modules,
+        "changed_notebooks": notebooks,
         "test_files_changed": sorted(touched_tests),
         "deleted_tests": deleted,
         "skips_added": switched_off,
         "untested_modules": untested,
+        "untested_notebooks": untested_notebooks,
         "exempt_reason": exempt,
     }
+
+
+def notebook_code_added(start: str, path: str) -> bool:
+    """Whether the commits added a code line to the notebook: not blank, not a
+    comment, a `# MAGIC` line or a `# COMMAND` cell marker."""
+    for line in git("diff", "-U0", start, "HEAD", "--", path).splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            text = line[1:].strip()
+            if text and not text.startswith("#"):
+                return True
+    return False
 
 
 def run_pytest(out_dir: Path) -> dict:
@@ -131,6 +157,7 @@ def run_pytest(out_dir: Path) -> dict:
 
 
 def main() -> int:
+    ci = "--ci" in sys.argv
     out_dir = Path(os.environ["OUT_DIR"])
     start = os.environ["START_SHA"]
     if not re.fullmatch(r"[0-9a-f]{40}", start):
@@ -145,12 +172,25 @@ def main() -> int:
             problems.append(f"test files deleted: {', '.join(result['deleted_tests'])}")
         if result["skips_added"]:
             problems.append(f"tests switched off: {'; '.join(result['skips_added'])}")
+        untested = []
         if result["untested_modules"] and not result["exempt_reason"]:
-            problems.append(
+            untested.append(
                 "logic changed without its unit tests: "
                 + ", ".join(f"{m} (expected tests/test_{Path(m).stem}.py)" for m in result["untested_modules"])
             )
-        if "--dry-run" not in sys.argv:
+        if result["untested_notebooks"] and not result["exempt_reason"]:
+            untested.append(
+                "notebook logic changed without unit tests: "
+                + ", ".join(result["untested_notebooks"])
+                + " (move the logic into a module with tests/test_<module>.py)"
+            )
+        if ci:
+            result["warnings"] = untested  # a developer's PR: shown, not blocking
+            for warning in untested:
+                print(f"::warning::unit tests: {warning}")
+        else:
+            problems += untested
+        if "--dry-run" not in sys.argv and not ci:
             result["pytest"] = run_pytest(out_dir)
             p = result["pytest"]
             if p["exit_code"] != 0 or p["failed"]:

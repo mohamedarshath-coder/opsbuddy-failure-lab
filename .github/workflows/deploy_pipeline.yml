@@ -73,6 +73,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # DataSakshi D110: on every PR, a developer's too: no test may be deleted or
+      # switched off (fails); logic without tests is shown as a warning. The guard
+      # comes from main, so a PR cannot weaken the check that judges it.
+      - name: Test integrity (no deleted or switched-off tests)
+        if: hashFiles('tests/**/*.py') != ''
+        run: |
+          guard="$RUNNER_TEMP/unit_test_guard.py"
+          git show origin/main:.github/scripts/unit_test_guard.py > "$guard" 2>/dev/null || true
+          # Until main has the --ci mode, use this PR's copy once.
+          grep -q -- "--ci" "$guard" || cp .github/scripts/unit_test_guard.py "$guard"
+          mkdir -p "$RUNNER_TEMP/guard"
+          OUT_DIR="$RUNNER_TEMP/guard" START_SHA="$(git rev-parse HEAD^1)" python "$guard" --ci
       - name: Unit tests (no Databricks)
         if: hashFiles('tests/**/*.py') != ''
         run: |
