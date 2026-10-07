@@ -1,0 +1,43 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Every shipment in the carrier feed is kept, with a
+# weight in kg and a freight charge in USD.
+table: dev.opsbuddy_test.sd_shipments
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: shipment_id, type: string}
+      - {name: warehouse_id, type: string}
+      - {name: carrier, type: string}
+      - {name: shipped_on, type: date}
+      - {name: delivered_on, type: date}
+      - {name: weight_kg, type: double}
+      - {name: freight_usd, type: "decimal(12,2)"}
+      - {name: transit_days, type: int}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: all_feed_shipments
+    type: row_count
+    min: 120
+    phases: [branch, uat, postprod]
+  - id: one_row_per_shipment
+    type: uniqueness
+    columns: [shipment_id]
+    phases: [branch, uat, postprod]
+  - id: weight_not_null
+    type: null_rate
+    column: weight_kg
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: freight_not_null
+    type: null_rate
+    column: freight_usd
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: carrier_is_known
+    type: accepted_values
+    column: carrier
+    values: [Northwind Freight, Kestrel Express, Harbor Line, Atlas Parcel]
+    phases: [branch, uat, postprod]
+required: [all_feed_shipments, one_row_per_shipment, weight_not_null, freight_not_null, carrier_is_known]

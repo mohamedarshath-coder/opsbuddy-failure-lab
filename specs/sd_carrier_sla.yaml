@@ -1,0 +1,38 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). One row per carrier in the weekly carrier review.
+table: dev.opsbuddy_test.sd_carrier_sla
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: carrier, type: string}
+      - {name: shipments_count, type: bigint}
+      - {name: delivered_count, type: bigint}
+      - {name: on_time_count, type: bigint}
+      - {name: on_time_pct, type: "decimal(5,1)"}
+      - {name: avg_transit_days, type: "decimal(6,2)"}
+      - {name: total_freight_usd, type: "decimal(14,2)"}
+      - {name: freight_per_kg, type: "decimal(10,2)"}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: four_carriers
+    type: row_count
+    min: 4
+    max: 4
+    phases: [branch, uat, postprod]
+  - id: one_row_per_carrier
+    type: uniqueness
+    columns: [carrier]
+    phases: [branch, uat, postprod]
+  - id: carrier_is_known
+    type: accepted_values
+    column: carrier
+    values: [Northwind Freight, Kestrel Express, Harbor Line, Atlas Parcel]
+    phases: [branch, uat, postprod]
+  - id: freight_per_kg_not_null
+    type: null_rate
+    column: freight_per_kg
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [four_carriers, one_row_per_carrier, carrier_is_known, freight_per_kg_not_null]
