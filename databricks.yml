@@ -210,6 +210,16 @@ resources:
             base_parameters:
               target_schema: ${var.target_schema}
 
+    customers_30_45:
+      name: "customers_30_45_${bundle.target}"
+      tasks:
+        - task_key: build_customers_30_45
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/61_customers_30_45.py
+            base_parameters:
+              target_schema: ${var.academy_schema}
+
 targets:
   qa:
     mode: development
