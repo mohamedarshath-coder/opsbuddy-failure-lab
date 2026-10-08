@@ -23,6 +23,12 @@ variables:
       across these jobs deliberately, not one variable per job -- they all genuinely use the
       same demo catalog/schema convention.
     default: "dev.opsbuddy_test"
+  academy_schema:
+    description: >-
+      Where the academy pipelines write (catalog.schema). They read their sources,
+      such as dev.academy.customers, by full name; the qa target writes to
+      dev.academy_qa so CI runs never touch the real academy tables.
+    default: "dev.academy"
 
 resources:
   jobs:
@@ -210,6 +216,7 @@ targets:
     variables:
       target_schema: "qa"
       bronze_target_schema: "dev.opsbuddy_test_qa"
+      academy_schema: "dev.academy_qa"
     workspace:
       host: https://adb-3750626659891863.3.azuredatabricks.net
       root_path: /Workspace/Users/mohamed.arshath@latentviewo365.onmicrosoft.com/.bundle/${bundle.name}/${bundle.target}
@@ -219,6 +226,7 @@ targets:
     variables:
       target_schema: "default"
       bronze_target_schema: "dev.opsbuddy_test"
+      academy_schema: "dev.academy"
     workspace:
       host: https://adb-3750626659891863.3.azuredatabricks.net
       # required for any target with mode: production, so exactly one copy of the bundle is

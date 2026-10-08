@@ -123,16 +123,46 @@ def jobs_changed_in_yml(base_ref: str, head_ref: str):
     before, after = yml_at(base_ref), yml_at(head_ref)
     if before is None or after is None:
         return None
-    def outside(spec):
-        rest = dict(spec)
-        resources = dict(rest.pop("resources", {}) or {})
-        resources.pop("jobs", None)
-        return rest, resources
-    if outside(before) != outside(after):
+    names = changed_variables(before, after)
+    if names is None:
         return None
     old = (before.get("resources", {}) or {}).get("jobs", {}) or {}
     new = (after.get("resources", {}) or {}).get("jobs", {}) or {}
-    return {name for name, job in new.items() if old.get(name) != job}
+    changed = {name for name, job in new.items() if old.get(name) != job}
+    # A job that reads a changed variable runs differently even if its own definition did
+    # not change; a newly added variable is read by no existing job, so it selects none.
+    for name, job in new.items():
+        text = yaml.safe_dump(job)
+        if any("${var." + var + "}" in text for var in names):
+            changed.add(name)
+    return changed
+
+
+def changed_variables(before: dict, after: dict):
+    """The names of bundle variables whose value differs (top-level `variables` or any
+    `targets.<t>.variables`), or None when anything else outside resources.jobs changed
+    (bundle, include, workspace, other resources, a target's other settings), which may
+    affect every job and so still needs full coverage."""
+    def split(spec):
+        rest = dict(spec)
+        resources = dict(rest.pop("resources", {}) or {})
+        resources.pop("jobs", None)
+        variables = rest.pop("variables", {}) or {}
+        targets, target_vars = {}, {}
+        for tname, target in (rest.pop("targets", {}) or {}).items():
+            target = dict(target or {})
+            target_vars[tname] = target.pop("variables", {}) or {}
+            targets[tname] = target
+        return rest, resources, targets, variables, target_vars
+    b_rest, b_res, b_targets, b_vars, b_tvars = split(before)
+    a_rest, a_res, a_targets, a_vars, a_tvars = split(after)
+    if (b_rest, b_res, b_targets) != (a_rest, a_res, a_targets):
+        return None
+    names = {k for k in set(b_vars) | set(a_vars) if b_vars.get(k) != a_vars.get(k)}
+    for tname in set(b_tvars) | set(a_tvars):
+        bv, av = b_tvars.get(tname, {}), a_tvars.get(tname, {})
+        names |= {k for k in set(bv) | set(av) if bv.get(k) != av.get(k)}
+    return names
 
 
 def changed_files(base_ref: str, head_ref: str) -> list:
@@ -165,7 +195,8 @@ def main():
         by_yml = jobs_changed_in_yml(base_ref, head_ref)
         if by_yml is None:
             print(
-                "databricks.yml changed outside resources.jobs -- running ALL bundle jobs "
+                "databricks.yml changed outside resources.jobs and variables -- running ALL "
+                "bundle jobs "
                 "(structural change, not safely scoped by file identity)",
                 file=sys.stderr,
             )

@@ -1,0 +1,47 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). The academy customer table, imported from files: no
+# pipeline code builds it. Its 25 columns are listed here so a change that reads
+# it knows its shape. Checked in production only: it has no QA copy (pipelines
+# read it by its full name in QA and production alike).
+table: dev.academy.customers
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: customer_id, type: string}
+      - {name: customer_name, type: string}
+      - {name: age, type: int}
+      - {name: income, type: int}
+      - {name: distance_to_store, type: double}
+      - {name: urbanicity, type: string}
+      - {name: climate_zone, type: string}
+      - {name: search_specificity, type: int}
+      - {name: spec_expansion_rate, type: double}
+      - {name: bundle_affinity, type: double}
+      - {name: price_sort_frequency, type: double}
+      - {name: total_spend_12mo, type: double}
+      - {name: purchase_frequency, type: int}
+      - {name: recency_days, type: int}
+      - {name: avg_order_value, type: double}
+      - {name: dominant_category, type: string}
+      - {name: brand_loyalty, type: string}
+      - {name: return_rate, type: double}
+      - {name: channel_preference, type: string}
+      - {name: join_date, type: date}
+      - {name: true_persona, type: string}
+      - {name: email, type: string}
+      - {name: churn_risk_score, type: double}
+      - {name: churn_risk_tier, type: string}
+      - {name: churn_reasons, type: string}
+    allow_extra_columns: true
+    phases: [postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [postprod]
+  - id: one_row_per_customer
+    type: uniqueness
+    columns: [customer_id]
+    phases: [postprod]
+required: [not_empty, one_row_per_customer]

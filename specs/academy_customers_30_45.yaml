@@ -1,0 +1,56 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Customers aged 30 to 45 inclusive, taken from
+# dev.academy.customers with every column unchanged. "academy" is read as
+# academy_qa on the branch and in UAT (Settings -> Repo setup, schemas).
+table: dev.academy.customers_30_45
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: customer_id, type: string}
+      - {name: customer_name, type: string}
+      - {name: age, type: int}
+      - {name: income, type: int}
+      - {name: distance_to_store, type: double}
+      - {name: urbanicity, type: string}
+      - {name: climate_zone, type: string}
+      - {name: search_specificity, type: int}
+      - {name: spec_expansion_rate, type: double}
+      - {name: bundle_affinity, type: double}
+      - {name: price_sort_frequency, type: double}
+      - {name: total_spend_12mo, type: double}
+      - {name: purchase_frequency, type: int}
+      - {name: recency_days, type: int}
+      - {name: avg_order_value, type: double}
+      - {name: dominant_category, type: string}
+      - {name: brand_loyalty, type: string}
+      - {name: return_rate, type: double}
+      - {name: channel_preference, type: string}
+      - {name: join_date, type: date}
+      - {name: true_persona, type: string}
+      - {name: email, type: string}
+      - {name: churn_risk_score, type: double}
+      - {name: churn_risk_tier, type: string}
+      - {name: churn_reasons, type: string}
+    allow_extra_columns: false
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_customer
+    type: uniqueness
+    columns: [customer_id]
+    phases: [branch, uat, postprod]
+  - id: age_not_null
+    type: null_rate
+    column: age
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: age_is_30_to_45
+    type: accepted_values
+    column: age
+    values: ["30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"]
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_customer, age_not_null, age_is_30_to_45]
