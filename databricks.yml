@@ -121,6 +121,35 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    shipment_sla_pipeline:
+      name: "shipment_sla_pipeline_${bundle.target}"
+      tasks:
+        # Shipment delivery SLA: warehouses -> shipments (from the raw carrier
+        # feed dev.opsbuddy_test.sd_carrier_feed, landed upstream by notebook 50)
+        # -> carrier SLA report.
+        - task_key: sd_warehouses
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/51_sd_warehouses.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+        - task_key: sd_shipments
+          depends_on:
+            - task_key: sd_warehouses
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/52_sd_shipments.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+        - task_key: sd_carrier_sla
+          depends_on:
+            - task_key: sd_shipments
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/53_sd_carrier_sla.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:

@@ -1,0 +1,34 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). "dev" is the logical catalog; DataSakshi maps it to
+# the real catalog per phase in Settings -> Repo setup.
+table: dev.opsbuddy_test.sd_warehouses
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: warehouse_id, type: string}
+      - {name: warehouse_name, type: string}
+      - {name: region, type: string}
+      - {name: city, type: string}
+      - {name: capacity_pallets, type: bigint}
+      - {name: opened_on, type: date}
+      - {name: ops_team, type: string}
+      - {name: is_active, type: boolean}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: twelve_warehouses
+    type: row_count
+    min: 12
+    max: 12
+    phases: [branch, uat, postprod]
+  - id: one_row_per_warehouse
+    type: uniqueness
+    columns: [warehouse_id]
+    phases: [branch, uat, postprod]
+  - id: region_is_known
+    type: accepted_values
+    column: region
+    values: [North, South, East, West, Central]
+    phases: [branch, uat, postprod]
+required: [twelve_warehouses, one_row_per_warehouse, region_is_known]
