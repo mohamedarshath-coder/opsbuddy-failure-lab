@@ -1,0 +1,24 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Accounts medallion demo, bronze layer.
+table: dev.opsbuddy_test.accounts_bronze
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: account_id, type: string}
+      - {name: account_name, type: string}
+      - {name: industry, type: string}
+      - {name: billing_country, type: string}
+      - {name: annual_revenue, type: string}
+      - {name: employee_count, type: string}
+      - {name: created_date, type: string}
+      - {name: owner_team, type: string}
+      - {name: source_object, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+required: [not_empty]

@@ -1,0 +1,39 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Accounts medallion demo, silver layer.
+table: dev.opsbuddy_test.accounts_silver
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: account_id, type: string}
+      - {name: account_name, type: string}
+      - {name: industry, type: string}
+      - {name: billing_country, type: string}
+      - {name: annual_revenue, type: "decimal(14,2)"}
+      - {name: employee_count, type: int}
+      - {name: created_date, type: date}
+      - {name: owner_team, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_account
+    type: uniqueness
+    columns: [account_id]
+    phases: [branch, uat, postprod]
+  - id: industry_is_known
+    type: accepted_values
+    column: industry
+    values: [Software, Retail, Healthcare, Finance, Manufacturing]
+    phases: [branch, uat, postprod]
+  - id: revenue_not_null
+    type: null_rate
+    column: annual_revenue
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: employees_in_range
+    type: range
+    column: employee_count
+    min: 1
+    max: 100000
+    phases: [branch, uat, postprod]
+required: [one_row_per_account, industry_is_known, revenue_not_null, employees_in_range]

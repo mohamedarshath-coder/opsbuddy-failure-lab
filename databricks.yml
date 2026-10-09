@@ -156,6 +156,42 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    med_bronze_accounts:
+      name: "med_bronze_accounts_${bundle.target}"
+      # Accounts medallion demo, bronze layer: a separate job per layer, so CI orders
+      # them by the tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: bronze
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/71_med_bronze_accounts.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    med_silver_accounts:
+      name: "med_silver_accounts_${bundle.target}"
+      # Accounts medallion demo, silver layer: a separate job per layer, so CI orders
+      # them by the tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: silver
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/72_med_silver_accounts.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    med_gold_accounts:
+      name: "med_gold_accounts_${bundle.target}"
+      # Accounts medallion demo, gold layer: a separate job per layer, so CI orders
+      # them by the tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/73_med_gold_accounts.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:
