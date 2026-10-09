@@ -83,21 +83,114 @@ def resolve_local_imports(notebook_path: str, repo_root: str = ".") -> set:
     return resolved
 
 
+# --- running order (DataSakshi: bronze -> silver -> gold) ---
+
+_WRITE_PATTERN = re.compile(
+    r"""saveAsTable\(\s*f?["']([^"']+)["']|@dlt\.(?:table|view)\(\s*name\s*=\s*f?["']([^"']+)["']"""
+)
+_READ_PATTERN = re.compile(
+    r"""\.table\(\s*f?["']([^"']+)["']|dlt\.read(?:_stream)?\(\s*f?["']([^"']+)["']"""
+)
+
+
+def _names(pattern, source: str) -> set:
+    return {_table_name(a or b) for a, b in pattern.findall(source)}
+
+
+def _table_name(text: str) -> str:
+    """'{target_schema}.cc2_orders' or 'dev.academy.customers' -> 'cc2_orders' / 'customers':
+    the last name segment, so a QA and a prod schema compare equal."""
+    return text.replace("}", ".").split(".")[-1].strip().lower()
+
+
+def job_tables(job_def: dict, repo_root: str = ".") -> tuple:
+    """(tables the job writes, tables it reads), by last name segment, from the source of
+    its notebook tasks and the local modules they import. A table named through a variable
+    (spark.table(feed_table)) is not seen; use the datasakshi_after tag for that."""
+    writes, reads = set(), set()
+    for path in resource_paths(job_def):
+        files = {normalize(path)} | resolve_local_imports(path, repo_root)
+        for rel in files:
+            try:
+                with open(os.path.join(repo_root, rel), "r", encoding="utf-8") as f:
+                    source = f.read()
+            except OSError:
+                continue
+            writes |= _names(_WRITE_PATTERN, source)
+            reads |= _names(_READ_PATTERN, source)
+    return writes, reads - writes
+
+
+def run_order(selected: list, spec: dict, repo_root: str = ".") -> list:
+    """`selected` sorted so a job runs after every selected job it depends on: one that
+    writes a table it reads, or one named in its `datasakshi_after` tag (comma-separated
+    job keys). Ties keep alphabetical order; a cycle keeps the remaining jobs alphabetical
+    and says so."""
+    defs = bundle_resources(spec)
+    tables = {name: job_tables(defs.get(name) or {}, repo_root) for name in selected}
+    after = {name: set() for name in selected}
+    for name in selected:
+        tag = str(((defs.get(name) or {}).get("tags") or {}).get("datasakshi_after") or "")
+        after[name] |= {t.strip() for t in tag.split(",") if t.strip() in after and t.strip() != name}
+        _, reads = tables[name]
+        for other in selected:
+            if other != name and tables[other][0] & reads:
+                after[name].add(other)
+    order, done = [], set()
+    remaining = sorted(selected)
+    while remaining:
+        ready = [n for n in remaining if after[n] <= done]
+        if not ready:
+            print(f"::warning::job dependency cycle among {remaining}; running them alphabetically",
+                  file=sys.stderr)
+            ready = remaining[:1]
+        order.append(ready[0])
+        done.add(ready[0])
+        remaining.remove(ready[0])
+    for name in order:
+        if after[name]:
+            print(f"  {name} runs after {sorted(after[name])}", file=sys.stderr)
+    return order
+
+
+def resource_paths(resource: dict) -> list:
+    """The source files a job or a DLT pipeline runs: each job task's notebook_path, or
+    each pipeline library's notebook/file path."""
+    paths = []
+    for task in resource.get("tasks", []) or []:
+        path = (task.get("notebook_task") or {}).get("notebook_path")
+        if path:
+            paths.append(path)
+    for library in resource.get("libraries", []) or []:
+        for kind in ("notebook", "file"):
+            path = (library.get(kind) or {}).get("path")
+            if path:
+                paths.append(path)
+    return paths
+
+
+def bundle_resources(spec: dict) -> dict:
+    """Every runnable bundle resource by key: jobs and DLT pipelines (both run with
+    `databricks bundle run <key>`)."""
+    resources = spec.get("resources", {}) or {}
+    out = dict(resources.get("jobs", {}) or {})
+    for key, pipeline in (resources.get("pipelines", {}) or {}).items():
+        out.setdefault(key, pipeline)
+    return out
+
+
 def load_jobs(databricks_yml_path: str, repo_root: str = ".") -> dict:
-    """job_name -> set of files this job actually depends on: its own notebook_path values,
-    plus every real local import each of those notebooks resolves to."""
+    """job or pipeline key -> set of files it actually depends on: its own notebook and
+    library paths, plus every real local import each of those resolves to."""
     with open(databricks_yml_path, "r", encoding="utf-8") as f:
         spec = yaml.safe_load(f)
     jobs = {}
-    for job_name, job_def in (spec.get("resources", {}).get("jobs", {}) or {}).items():
+    for job_name, job_def in bundle_resources(spec).items():
         paths = set()
-        for task in job_def.get("tasks", []) or []:
-            notebook_task = task.get("notebook_task") or {}
-            path = notebook_task.get("notebook_path")
-            if path:
-                path = normalize(path)
-                paths.add(path)
-                paths |= resolve_local_imports(path, repo_root)
+        for path in resource_paths(job_def):
+            path = normalize(path)
+            paths.add(path)
+            paths |= resolve_local_imports(path, repo_root)
         jobs[job_name] = paths
     return jobs
 
@@ -126,8 +219,8 @@ def jobs_changed_in_yml(base_ref: str, head_ref: str):
     names = changed_variables(before, after)
     if names is None:
         return None
-    old = (before.get("resources", {}) or {}).get("jobs", {}) or {}
-    new = (after.get("resources", {}) or {}).get("jobs", {}) or {}
+    old = bundle_resources(before)
+    new = bundle_resources(after)
     changed = {name for name, job in new.items() if old.get(name) != job}
     # A job that reads a changed variable runs differently even if its own definition did
     # not change; a newly added variable is read by no existing job, so it selects none.
@@ -147,6 +240,7 @@ def changed_variables(before: dict, after: dict):
         rest = dict(spec)
         resources = dict(rest.pop("resources", {}) or {})
         resources.pop("jobs", None)
+        resources.pop("pipelines", None)
         variables = rest.pop("variables", {}) or {}
         targets, target_vars = {}, {}
         for tname, target in (rest.pop("targets", {}) or {}).items():
@@ -207,6 +301,10 @@ def main():
             selected = sorted((by_files | by_yml) & set(jobs))
     else:
         selected = sorted(by_files)
+
+    if len(selected) > 1:
+        with open("databricks.yml", "r", encoding="utf-8") as f:
+            selected = run_order(selected, yaml.safe_load(f) or {})
 
     if not selected:
         print(

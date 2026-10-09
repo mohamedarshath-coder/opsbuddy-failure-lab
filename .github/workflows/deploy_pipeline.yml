@@ -188,7 +188,7 @@ jobs:
             echo "$jobs"
             echo "PROD_JOBS_EOF"
           } >> "$GITHUB_OUTPUT"
-      # DataSakshi D93: copy every governed table (deep clone) before the jobs change it, so a
+      # DataSakshi D93: copy the governed tables this release writes (deep clone) before the jobs change them, so a
       # rollback can restore it after Delta's 7-day file retention. A failed copy stops the deploy.
       - name: Copy governed tables before the jobs run
         if: steps.select.outputs.jobs != ''
@@ -201,6 +201,8 @@ jobs:
           CATALOG_MAP: dev=dev
           MERGE_SHA: ${{ github.sha }}
           KEEP_DAYS: "30"
+          # Copy only what this release's jobs write (falls back to every governed table).
+          JOBS: ${{ steps.select.outputs.jobs }}
       - name: Run each affected bundle job on the prod target
         if: steps.select.outputs.jobs != ''
         run: |
