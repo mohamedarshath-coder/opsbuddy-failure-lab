@@ -8,12 +8,19 @@ retention (7 days by default) has made time travel impossible. DataSakshi finds
 the copy by that name and checks its history (CLONE of the same table at the
 version to restore) before using it.
 
+Only the tables this release's jobs write are copied when JOBS (the selected
+jobs, one per line) is set and every one of those jobs' written tables can be
+read from its code; otherwise every governed table is, as before. A read-only
+source is not copied: the release does not change it. A DLT materialized view
+or streaming table cannot be deep cloned, so it gets a plain snapshot copy
+(CREATE TABLE ... AS SELECT); a view holds no data and is skipped.
+
 A table that does not exist yet (created by this release) is skipped. Copies
 older than KEEP_DAYS are dropped. Any other failure fails the deploy before the
 jobs run, so a release never changes data without its copy.
 
 Environment: DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID,
-BACKUP_SCHEMA, MERGE_SHA, optional CATALOG_MAP ("logical=real,..."), KEEP_DAYS.
+BACKUP_SCHEMA, MERGE_SHA, optional CATALOG_MAP ("logical=real,..."), KEEP_DAYS, JOBS.
 `--dry-run` prints the statements instead of running them.
 """
 
@@ -88,6 +95,24 @@ class Sql:
         return (result.get("result") or {}).get("data_array") or []
 
 
+def written_by(jobs: list[str], yml: str = "databricks.yml") -> set[str] | None:
+    """Table names (last segment) the given jobs write, or None when any of them has no
+    write the code shows (e.g. a table name in a variable): then copy everything."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import select_qa_jobs  # the same reading of the jobs' code as the job selection
+
+    with open(yml, "r", encoding="utf-8") as f:
+        defs = select_qa_jobs.bundle_resources(yaml.safe_load(f) or {})
+    names: set[str] = set()
+    for job in jobs:
+        writes, _ = select_qa_jobs.job_tables(defs.get(job) or {})
+        if not writes:
+            print(f"{job}: its written tables are not visible in its code; copying every governed table.")
+            return None
+        names |= writes
+    return names
+
+
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
     env = os.environ
@@ -106,19 +131,40 @@ def main() -> None:
         dry_run,
     )
     tables = governed_tables("specs", catalog_map)
+    jobs = [j.strip() for j in env.get("JOBS", "").splitlines() if j.strip()]
+    written = written_by(jobs) if jobs else None
+    if written is not None:
+        skipped = [t for t in tables if t.split(".")[-1].lower() not in written]
+        tables = [t for t in tables if t.split(".")[-1].lower() in written]
+        if skipped:
+            print(f"Not changed by this release, so not copied: {', '.join(skipped)}")
     if not tables:
-        print("No governed tables (no check specs): nothing to copy.")
+        print("No governed table is written by this release: nothing to copy.")
         return
     for catalog in sorted({t.split(".")[0] for t in tables}):
         sql.run(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
     for table in tables:
         catalog, table_schema, name = table.split(".")
-        exists = sql.run(f"SHOW TABLES IN {catalog}.{table_schema} LIKE '{name}'")
-        if not dry_run and not exists:
+        found = sql.run(
+            f"SELECT table_type FROM {catalog}.information_schema.tables "
+            f"WHERE lower(table_schema) = '{table_schema.lower()}' "
+            f"AND lower(table_name) = '{name.lower()}'"
+        )
+        if not dry_run and not found:
             print(f"{table} does not exist yet (this release creates it): no copy.")
             continue
-        sql.run(f"CREATE OR REPLACE TABLE {backup_name(table, schema, sha)} DEEP CLONE {table}")
-        print(f"Copied {table}", flush=True)
+        kind = str(found[0][0]).upper() if found else "MANAGED"
+        if kind == "VIEW":
+            print(f"{table} is a view (no data of its own): no copy.")
+            continue
+        target = backup_name(table, schema, sha)
+        if kind in ("MATERIALIZED_VIEW", "STREAMING_TABLE"):
+            # DLT tables cannot be deep cloned; a snapshot keeps the data for a rollback.
+            sql.run(f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {table}")
+            print(f"Copied {table} ({kind.lower()}, snapshot)", flush=True)
+        else:
+            sql.run(f"CREATE OR REPLACE TABLE {target} DEEP CLONE {table}")
+            print(f"Copied {table}", flush=True)
     for catalog in sorted({t.split(".")[0] for t in tables}):
         old = sql.run(
             f"SELECT table_name FROM {catalog}.information_schema.tables "
