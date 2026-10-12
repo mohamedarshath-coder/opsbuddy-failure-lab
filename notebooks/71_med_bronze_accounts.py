@@ -21,3 +21,14 @@ bronze.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
 written = spark.table(f"{target_schema}.accounts_bronze")
 assert written.count() == raw.count(), "accounts_bronze lost or gained rows"
 print(f"accounts_bronze: {written.count()} rows")
+
+# COMMAND ----------
+
+raw_tier = spark.table("dev.opsbuddy_test.sf_account_tier_raw")
+tier_bronze = raw_tier.withColumn("source_object", F.lit("salesforce.AccountTier"))
+tier_bronze.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+    f"{target_schema}.accounts_tier_bronze"
+)
+written_tier = spark.table(f"{target_schema}.accounts_tier_bronze")
+assert written_tier.count() == raw_tier.count(), "accounts_tier_bronze lost or gained rows"
+print(f"accounts_tier_bronze: {written_tier.count()} rows")
