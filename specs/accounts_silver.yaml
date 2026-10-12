@@ -3,114 +3,57 @@
 table: dev.opsbuddy_test.accounts_silver
 version: 1
 checks:
-- id: expected_schema
-  type: schema
-  columns:
-  - name: account_id
-    type: string
-  - name: account_name
-    type: string
-  - name: industry
-    type: string
-  - name: billing_country
-    type: string
-  - name: annual_revenue
-    type: decimal(14,2)
-  - name: employee_count
-    type: int
-  - name: created_date
-    type: date
-  - name: owner_team
-    type: string
-  allow_extra_columns: true
-  phases:
-  - branch
-  - uat
-  - postprod
-- id: one_row_per_account
-  type: uniqueness
-  columns:
-  - account_id
-  phases:
-  - branch
-  - uat
-  - postprod
-- id: industry_is_known
-  type: accepted_values
-  column: industry
-  values:
-  - Software
-  - Retail
-  - Healthcare
-  - Finance
-  - Manufacturing
-  phases:
-  - branch
-  - uat
-  - postprod
-- id: revenue_not_null
-  type: null_rate
-  column: annual_revenue
-  max_pct: 0
-  phases:
-  - branch
-  - uat
-  - postprod
-- id: employees_in_range
-  type: range
-  column: employee_count
-  min: 1
-  max: 100000
-  phases:
-  - branch
-  - uat
-  - postprod
-- id: accepted_values
-  type: accepted_values
-  column: tier
-  values:
-  - Gold
-  - Silver
-  - Bronze
-  - Unassigned
-  phases:
-  - uat
-  - postprod
-- id: row_count
-  type: row_count
-  min: 40
-  max: 40
-  phases:
-  - uat
-  - postprod
-- id: null_rate
-  type: null_rate
-  column: tier
-  max_pct: 0
-  phases:
-  - uat
-  - postprod
-- id: schema
-  type: schema
-  columns:
-  - name: tier
-    type: string
-  - name: tier_since
-    type: date
-  - name: renewal_date
-    type: date
-  - name: is_strategic
-    type: boolean
-  allow_extra_columns: true
-  phases:
-  - uat
-  - postprod
-required:
-- one_row_per_account
-- industry_is_known
-- revenue_not_null
-- employees_in_range
-- accepted_values
-- row_count
-- null_rate
-- schema
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: account_id, type: string}
+      - {name: account_name, type: string}
+      - {name: industry, type: string}
+      - {name: billing_country, type: string}
+      - {name: annual_revenue, type: "decimal(14,2)"}
+      - {name: employee_count, type: int}
+      - {name: created_date, type: date}
+      - {name: owner_team, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_account
+    type: uniqueness
+    columns: [account_id]
+    phases: [branch, uat, postprod]
+  - id: industry_is_known
+    type: accepted_values
+    column: industry
+    values: [Software, Retail, Healthcare, Finance, Manufacturing]
+    phases: [branch, uat, postprod]
+  - id: revenue_not_null
+    type: null_rate
+    column: annual_revenue
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: employees_in_range
+    type: range
+    column: employee_count
+    min: 1
+    max: 100000
+    phases: [branch, uat, postprod]
+  - id: accepted_values
+    type: accepted_values
+    column: tier
+    values: [Gold, Silver, Bronze, Unassigned]
+    phases: [uat, postprod]
+  - id: row_count
+    type: row_count
+    min: 40
+    max: 40
+    phases: [uat, postprod]
+  - id: null_rate
+    type: null_rate
+    column: tier
+    max_pct: 0
+    phases: [uat, postprod]
+  - id: schema
+    type: schema
+    columns: [{name: tier, type: string}, {name: tier_since, type: date}, {name: renewal_date, type: date}, {name: is_strategic, type: boolean}]
+    allow_extra_columns: true
+    phases: [uat, postprod]
+required: [one_row_per_account, industry_is_known, revenue_not_null, employees_in_range, accepted_values, row_count, null_rate, schema]
