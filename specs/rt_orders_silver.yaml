@@ -1,0 +1,38 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Retail orders demo, silver.
+table: dev.opsbuddy_test.rt_orders_silver
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: order_id, type: string}
+      - {name: customer_id, type: string}
+      - {name: order_date, type: date}
+      - {name: amount, type: "decimal(12,2)"}
+      - {name: channel, type: string}
+      - {name: status, type: string}
+      - {name: customer_country, type: string}
+      - {name: customer_segment, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_order
+    type: uniqueness
+    columns: [order_id]
+    phases: [branch, uat, postprod]
+  - id: status_is_known
+    type: accepted_values
+    column: status
+    values: [delivered, cancelled, returned]
+    phases: [branch, uat, postprod]
+  - id: channel_is_known
+    type: accepted_values
+    column: channel
+    values: [web, app, store]
+    phases: [branch, uat, postprod]
+  - id: amount_positive
+    type: range
+    column: amount
+    min: 0
+    phases: [branch, uat, postprod]
+required: [one_row_per_order, status_is_known, channel_is_known, amount_positive]

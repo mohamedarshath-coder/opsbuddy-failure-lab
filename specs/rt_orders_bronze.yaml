@@ -1,0 +1,10 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Retail orders demo, bronze.
+table: dev.opsbuddy_test.rt_orders_bronze
+version: 1
+checks:
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+required: [not_empty]

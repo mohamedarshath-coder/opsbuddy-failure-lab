@@ -1,0 +1,25 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Retail orders demo, gold.
+table: dev.opsbuddy_test.rt_daily_revenue
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: order_date, type: date}
+      - {name: customer_country, type: string}
+      - {name: delivered_orders, type: bigint}
+      - {name: revenue, type: "decimal(14,2)"}
+      - {name: cancelled_orders, type: bigint}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_day_country
+    type: uniqueness
+    columns: [order_date, customer_country]
+    phases: [branch, uat, postprod]
+  - id: revenue_not_negative
+    type: range
+    column: revenue
+    min: 0
+    phases: [branch, uat, postprod]
+required: [one_row_per_day_country, revenue_not_negative]
