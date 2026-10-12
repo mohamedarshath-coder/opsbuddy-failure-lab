@@ -26,19 +26,31 @@ if _repo_root not in sys.path:
 
 from pyspark.sql import functions as F
 
-from notebooks.common.account_cleaning import INDUSTRIES, SILVER_COLUMNS, clean_accounts
+from notebooks.common.account_cleaning import (
+    INDUSTRIES,
+    SILVER_TIER_COLUMNS,
+    TIERS,
+    UNASSIGNED,
+    add_tiers,
+    clean_accounts,
+    clean_tiers,
+)
 
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
 target_schema = dbutils.widgets.get("target_schema")
 
 # COMMAND ----------
 
-silver = clean_accounts(spark.table(f"{target_schema}.accounts_bronze"))
+accounts = clean_accounts(spark.table(f"{target_schema}.accounts_bronze"))
+tiers = clean_tiers(spark.table(f"{target_schema}.accounts_tier_bronze"))
+silver = add_tiers(accounts, tiers)
 silver.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
     f"{target_schema}.accounts_silver"
 )
 written = spark.table(f"{target_schema}.accounts_silver")
-assert written.columns == SILVER_COLUMNS, f"unexpected columns {written.columns}"
+assert written.columns == SILVER_TIER_COLUMNS, f"unexpected columns {written.columns}"
 assert written.select("account_id").distinct().count() == written.count(), "duplicate account_id"
 assert written.filter(~F.col("industry").isin(INDUSTRIES)).count() == 0, "unknown industry"
+assert written.count() == 40, "expected exactly 40 accounts"
+assert written.filter(~F.col("tier").isin(TIERS + [UNASSIGNED])).count() == 0, "unknown tier"
 print(f"accounts_silver: {written.count()} accounts")

@@ -47,3 +47,88 @@ def test_a_repeated_account_is_kept_once(spark):
 
 def test_empty_input_gives_empty_output(spark):
     assert _clean(spark).count() == 0
+
+
+# ---- SCRUM-141: tier fields ----
+from notebooks.common.account_cleaning import (  # noqa: E402
+    SILVER_TIER_COLUMNS,
+    add_tiers,
+    clean_tiers,
+)
+
+TRAW = (
+    "account_id string, tier string, tier_since string, region_owner_team string, "
+    "renewal_date string, health_score string, is_strategic string, source_system string"
+)
+
+
+def _tiers(spark, *rows):
+    return clean_tiers(spark.createDataFrame(list(rows), schema=TRAW))
+
+
+def _tr(acc, tier, strat="true", since="2024-01-31", ren="2025-12-31", hs="87.5"):
+    return (acc, tier, since, "T", ren, hs, strat, "sf")
+
+
+def _silver(spark, accounts, *tier_rows):
+    return add_tiers(_clean(spark, *accounts), _tiers(spark, *tier_rows))
+
+
+def test_gold_silver_bronze_accounts_get_tier_and_typed_fields(spark):
+    a = [ROW, ("A002",) + ROW[1:], ("A003",) + ROW[1:]]
+    rows = _silver(
+        spark, a, _tr("A001", "Gold"), _tr("A002", "Silver", "no"), _tr("A003", "Bronze", "1")
+    ).orderBy("account_id").collect()
+    assert [r["tier"] for r in rows] == ["Gold", "Silver", "Bronze"]
+    assert [r["is_strategic"] for r in rows] == [True, False, True]
+    assert rows[0]["tier_since"] == date(2024, 1, 31)
+    assert rows[0]["renewal_date"] == date(2025, 12, 31)
+    assert rows[0]["health_score"] == Decimal("87.50")
+    assert list(rows[0].asDict()) == SILVER_TIER_COLUMNS
+
+
+def test_account_with_no_tier_is_unassigned_with_null_fields(spark):
+    a = [ROW, ("A037",) + ROW[1:]]
+    rows = _silver(spark, a, _tr("A001", "Gold")).orderBy("account_id").collect()
+    assert len(rows) == 2
+    r = rows[1]
+    assert r["tier"] == "Unassigned"
+    assert (r["tier_since"], r["renewal_date"], r["health_score"], r["is_strategic"]) == (
+        None, None, None, None)
+
+
+def test_text_to_type_conversion_and_bad_values(spark):
+    rows = {
+        r["account_id"]: r
+        for r in _tiers(
+            spark,
+            _tr(" A1 ", " gOLD ", " YES ", "2024-02-29", "2024-12-31", " 9.999 "),
+            _tr("A2", "Silver", "false", "bad", "", "abc"),
+            _tr("A3", "Bronze", "maybe", None, None, None),
+            _tr("A4", "Platinum"),
+            _tr("A5", None),
+        ).collect()
+    }
+    assert rows["A1"]["tier"] == "Gold" and rows["A1"]["is_strategic"] is True
+    assert rows["A1"]["tier_since"] == date(2024, 2, 29)
+    assert rows["A1"]["health_score"] == Decimal("10.00")
+    assert rows["A2"]["is_strategic"] is False
+    assert (rows["A2"]["tier_since"], rows["A2"]["renewal_date"], rows["A2"]["health_score"]) == (
+        None, None, None)
+    assert rows["A3"]["is_strategic"] is None and rows["A3"]["tier_since"] is None
+    assert rows["A4"]["tier"] == "Unassigned"
+    assert rows["A5"]["tier"] == "Unassigned"
+
+
+def test_duplicate_tier_rows_do_not_duplicate_accounts(spark):
+    rows = _silver(
+        spark, [ROW], _tr("A001", "Gold"), _tr("A001", "Silver", since="2023-01-01"), _tr("A001 ", "Gold")
+    ).collect()
+    assert len(rows) == 1 and rows[0]["tier"] == "Gold"
+
+
+def test_existing_columns_keep_values_and_empty_tiers(spark):
+    before = _clean(spark, ROW).collect()[0].asDict()
+    after = _silver(spark, [ROW]).collect()[0].asDict()
+    assert all(after[c] == before[c] for c in before)
+    assert after["tier"] == "Unassigned"

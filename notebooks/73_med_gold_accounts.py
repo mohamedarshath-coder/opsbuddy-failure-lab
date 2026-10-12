@@ -21,6 +21,13 @@ summary = silver.groupBy("industry", "billing_country").agg(
     F.sum("employee_count").cast("bigint").alias("total_employees"),
     F.min("created_date").alias("first_created"),
     F.max("created_date").alias("last_created"),
+    F.count(F.when(F.col("is_strategic"), 1)).cast("bigint").alias("strategic_accounts"),
+    *[
+        F.sum(F.when(F.col("tier") == t, F.col("annual_revenue")))
+        .cast("decimal(16,2)")
+        .alias(f"revenue_{t.lower()}")
+        for t in ["Gold", "Silver", "Bronze", "Unassigned"]
+    ],
 )
 summary.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
     f"{target_schema}.account_summary"
