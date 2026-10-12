@@ -192,6 +192,66 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    rt_bronze:
+      name: "rt_bronze_${bundle.target}"
+      # Retail orders demo, bronze: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: bronze
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/81_rt_bronze.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    rt_silver:
+      name: "rt_silver_${bundle.target}"
+      # Retail orders demo, silver: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: silver
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/82_rt_silver.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    rt_gold_revenue:
+      name: "rt_gold_revenue_${bundle.target}"
+      # Retail orders demo, gold revenue: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold_revenue
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/83_rt_gold_revenue.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    rt_gold_ltv:
+      name: "rt_gold_ltv_${bundle.target}"
+      # Retail orders demo, gold customer LTV: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold_ltv
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/84_rt_gold_ltv.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    rt_mart_kpis:
+      name: "rt_mart_kpis_${bundle.target}"
+      # Retail orders demo, country KPI mart: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: mart_kpis
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/85_rt_mart_kpis.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:

@@ -1,0 +1,14 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Retail orders demo, gold.
+table: dev.opsbuddy_test.rt_customer_ltv
+version: 1
+checks:
+  - id: one_row_per_customer
+    type: uniqueness
+    columns: [customer_id]
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+required: [one_row_per_customer, not_empty]
