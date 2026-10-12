@@ -3,25 +3,56 @@
 table: dev.opsbuddy_test.account_summary
 version: 1
 checks:
-  - id: expected_schema
-    type: schema
-    columns:
-      - {name: industry, type: string}
-      - {name: billing_country, type: string}
-      - {name: accounts_count, type: bigint}
-      - {name: total_revenue, type: "decimal(16,2)"}
-      - {name: avg_revenue, type: "decimal(14,2)"}
-      - {name: total_employees, type: bigint}
-      - {name: first_created, type: date}
-      - {name: last_created, type: date}
-    allow_extra_columns: true
-    phases: [branch, uat, postprod]
-  - id: one_row_per_industry_country
-    type: uniqueness
-    columns: [industry, billing_country]
-    phases: [branch, uat, postprod]
-  - id: not_empty
-    type: row_count
-    min: 1
-    phases: [branch, uat, postprod]
-required: [one_row_per_industry_country, not_empty]
+- id: expected_schema
+  type: schema
+  columns:
+  - name: industry
+    type: string
+  - name: billing_country
+    type: string
+  - name: accounts_count
+    type: bigint
+  - name: total_revenue
+    type: decimal(16,2)
+  - name: avg_revenue
+    type: decimal(14,2)
+  - name: total_employees
+    type: bigint
+  - name: first_created
+    type: date
+  - name: last_created
+    type: date
+  allow_extra_columns: true
+  phases:
+  - branch
+  - uat
+  - postprod
+- id: one_row_per_industry_country
+  type: uniqueness
+  columns:
+  - industry
+  - billing_country
+  phases:
+  - branch
+  - uat
+  - postprod
+- id: not_empty
+  type: row_count
+  min: 1
+  phases:
+  - branch
+  - uat
+  - postprod
+- id: schema
+  type: schema
+  columns:
+  - name: strategic_accounts
+    type: bigint
+  allow_extra_columns: true
+  phases:
+  - uat
+  - postprod
+required:
+- one_row_per_industry_country
+- not_empty
+- schema
