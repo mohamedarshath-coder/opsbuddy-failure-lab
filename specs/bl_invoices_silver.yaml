@@ -1,0 +1,42 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Subscription billing demo, silver.
+table: dev.opsbuddy_test.bl_invoices_silver
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: invoice_id, type: string}
+      - {name: account_id, type: string}
+      - {name: subscription_id, type: string}
+      - {name: invoice_type, type: string}
+      - {name: credit_for, type: string}
+      - {name: issue_date, type: date}
+      - {name: currency, type: string}
+      - {name: amount_usd, type: "decimal(12,2)"}
+      - {name: paid_usd, type: "decimal(12,2)"}
+      - {name: last_paid_date, type: date}
+      - {name: status, type: string}
+      - {name: account_country, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_invoice
+    type: uniqueness
+    columns: [invoice_id]
+    phases: [branch, uat, postprod]
+  - id: type_is_known
+    type: accepted_values
+    column: invoice_type
+    values: [invoice, credit_note]
+    phases: [branch, uat, postprod]
+  - id: status_is_known
+    type: accepted_values
+    column: status
+    values: [paid, partial, open, credit]
+    phases: [branch, uat, postprod]
+  - id: amount_positive
+    type: range
+    column: amount_usd
+    min: 0
+    phases: [branch, uat, postprod]
+required: [one_row_per_invoice, type_is_known, status_is_known, amount_positive]

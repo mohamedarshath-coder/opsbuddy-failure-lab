@@ -192,6 +192,90 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    bl_bronze:
+      name: "bl_bronze_${bundle.target}"
+      # Subscription billing demo, bronze: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: bronze
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/91_bl_bronze.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    bl_silver_subscriptions:
+      name: "bl_silver_subscriptions_${bundle.target}"
+      # Subscription billing demo, silver subscriptions: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: silver_subscriptions
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/92_bl_silver_subscriptions.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    bl_silver_invoices:
+      name: "bl_silver_invoices_${bundle.target}"
+      # Subscription billing demo, silver invoices: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: silver_invoices
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/93_bl_silver_invoices.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    bl_gold_mrr:
+      name: "bl_gold_mrr_${bundle.target}"
+      # Subscription billing demo, gold MRR: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold_mrr
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/94_bl_gold_mrr.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    bl_gold_churn:
+      name: "bl_gold_churn_${bundle.target}"
+      # Subscription billing demo, gold churn cohorts: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold_churn
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/95_bl_gold_churn.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    bl_gold_ar_aging:
+      name: "bl_gold_ar_aging_${bundle.target}"
+      # Subscription billing demo, gold AR aging: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold_ar_aging
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/96_bl_gold_ar_aging.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    bl_mart_finance_kpis:
+      name: "bl_mart_finance_kpis_${bundle.target}"
+      # Subscription billing demo, finance KPI mart: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: mart_finance_kpis
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/97_bl_mart_finance_kpis.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:

@@ -1,0 +1,25 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Subscription billing demo, gold.
+table: dev.opsbuddy_test.bl_churn_cohorts
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: cohort_month, type: date}
+      - {name: subscriptions_started, type: bigint}
+      - {name: churned_within_3m, type: bigint}
+      - {name: churn_rate_3m_pct, type: "decimal(5,2)"}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_cohort
+    type: uniqueness
+    columns: [cohort_month]
+    phases: [branch, uat, postprod]
+  - id: rate_is_a_percent
+    type: range
+    column: churn_rate_3m_pct
+    min: 0
+    max: 100
+    phases: [branch, uat, postprod]
+required: [one_row_per_cohort, rate_is_a_percent]
