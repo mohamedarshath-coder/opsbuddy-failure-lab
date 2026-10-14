@@ -1,0 +1,10 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Subscription billing demo, bronze.
+table: dev.opsbuddy_test.bl_invoices_bronze
+version: 1
+checks:
+  - id: all_raw_rows
+    type: row_count
+    min: 40000
+    phases: [branch, uat, postprod]
+required: [all_raw_rows]

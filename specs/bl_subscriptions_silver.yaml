@@ -1,0 +1,43 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Subscription billing demo, silver.
+table: dev.opsbuddy_test.bl_subscriptions_silver
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: subscription_id, type: string}
+      - {name: account_id, type: string}
+      - {name: plan_id, type: string}
+      - {name: plan_tier, type: string}
+      - {name: billing_period, type: string}
+      - {name: start_date, type: date}
+      - {name: end_date, type: date}
+      - {name: seats, type: int}
+      - {name: discount_pct, type: int}
+      - {name: status, type: string}
+      - {name: account_country, type: string}
+      - {name: account_industry, type: string}
+      - {name: mrr_usd, type: double}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_subscription
+    type: uniqueness
+    columns: [subscription_id]
+    phases: [branch, uat, postprod]
+  - id: status_is_known
+    type: accepted_values
+    column: status
+    values: [active, cancelled]
+    phases: [branch, uat, postprod]
+  - id: tier_is_known
+    type: accepted_values
+    column: plan_tier
+    values: [starter, growth, business, enterprise]
+    phases: [branch, uat, postprod]
+  - id: mrr_not_negative
+    type: range
+    column: mrr_usd
+    min: 0
+    phases: [branch, uat, postprod]
+required: [one_row_per_subscription, status_is_known, tier_is_known, mrr_not_negative]

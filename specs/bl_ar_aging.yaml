@@ -1,0 +1,28 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Subscription billing demo, gold.
+table: dev.opsbuddy_test.bl_ar_aging
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: account_id, type: string}
+      - {name: account_country, type: string}
+      - {name: open_invoices, type: bigint}
+      - {name: open_usd, type: "decimal(14,2)"}
+      - {name: bucket_0_30_usd, type: "decimal(14,2)"}
+      - {name: bucket_31_60_usd, type: "decimal(14,2)"}
+      - {name: bucket_61_90_usd, type: "decimal(14,2)"}
+      - {name: bucket_90_plus_usd, type: "decimal(14,2)"}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: one_row_per_account
+    type: uniqueness
+    columns: [account_id]
+    phases: [branch, uat, postprod]
+  - id: open_positive
+    type: range
+    column: open_usd
+    min: 0
+    phases: [branch, uat, postprod]
+required: [one_row_per_account, open_positive]
