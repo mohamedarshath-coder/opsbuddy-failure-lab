@@ -1,0 +1,37 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Subscription billing demo, mart.
+table: dev.opsbuddy_test.bl_finance_kpis
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: account_country, type: string}
+      - {name: mrr_usd, type: "decimal(14,2)"}
+      - {name: arr_usd, type: "decimal(16,2)"}
+      - {name: open_ar_usd, type: "decimal(14,2)"}
+      - {name: overdue_90_pct, type: "decimal(5,1)"}
+      - {name: dso_days, type: "decimal(8,1)"}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: five_countries
+    type: row_count
+    min: 5
+    max: 5
+    phases: [branch, uat, postprod]
+  - id: one_row_per_country
+    type: uniqueness
+    columns: [account_country]
+    phases: [branch, uat, postprod]
+  - id: country_is_known
+    type: accepted_values
+    column: account_country
+    values: [AU, DE, GB, IN, US]
+    phases: [branch, uat, postprod]
+  - id: overdue_is_a_percent
+    type: range
+    column: overdue_90_pct
+    min: 0
+    max: 100
+    phases: [branch, uat, postprod]
+required: [five_countries, one_row_per_country, country_is_known, overdue_is_a_percent]
