@@ -132,3 +132,21 @@ def test_existing_columns_keep_values_and_empty_tiers(spark):
     after = _silver(spark, [ROW]).collect()[0].asDict()
     assert all(after[c] == before[c] for c in before)
     assert after["tier"] == "Unassigned"
+
+
+# ---- SCRUM-146: region_owner_team ----
+def test_region_owner_team_is_trimmed_and_carried_to_silver_last(spark):
+    s = _silver(spark, [ROW], _tr(ROW[0], "Gold")[:3] + (" EMEA-West ",) + _tr(ROW[0], "Gold")[4:])
+    assert s.columns[-1] == "region_owner_team"
+    assert s.collect()[0]["region_owner_team"] == "EMEA-West"
+
+
+@pytest.mark.parametrize("blank", ["", "   ", None])
+def test_blank_region_owner_team_becomes_null(spark, blank):
+    t = _tr("A1", "Gold")
+    row = t[:3] + (blank,) + t[4:]
+    assert _tiers(spark, row).collect()[0]["region_owner_team"] is None
+
+
+def test_account_without_tier_record_has_null_region_owner_team(spark):
+    assert _silver(spark, [ROW]).collect()[0]["region_owner_team"] is None

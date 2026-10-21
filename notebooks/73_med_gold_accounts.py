@@ -2,11 +2,31 @@
 # MAGIC %md
 # MAGIC # Accounts medallion · gold (3 of 3)
 # MAGIC `accounts_silver` → `account_summary`: per industry and country, the accounts,
-# MAGIC total and average revenue, employees and first/last sign-up. Runs after silver (72).
+# MAGIC total and average revenue, employees and first/last sign-up, Q4 2026 renewals (count and revenue) and the number of
+# MAGIC distinct regional owner teams. Runs after silver (72).
 
 # COMMAND ----------
 
+import os
+import sys
+
+# The repo root on sys.path, so `notebooks.common` imports work both as a bundle job
+# (path contains "/files/") and from a Databricks Git folder (repo/notebooks/<this>).
+_notebook_path = (
+    dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+)
+_idx = _notebook_path.find("/files/")
+_repo_root = "/Workspace" + (
+    _notebook_path[: _idx + len("/files")]
+    if _idx != -1
+    else os.path.dirname(os.path.dirname(_notebook_path))
+)
+if _repo_root not in sys.path:
+    sys.path.append(_repo_root)
+
 from pyspark.sql import functions as F
+
+from notebooks.common.account_summary import build_account_summary
 
 dbutils.widgets.text("target_schema", "dev.opsbuddy_test")
 target_schema = dbutils.widgets.get("target_schema")
@@ -14,21 +34,7 @@ target_schema = dbutils.widgets.get("target_schema")
 # COMMAND ----------
 
 silver = spark.table(f"{target_schema}.accounts_silver")
-summary = silver.groupBy("industry", "billing_country").agg(
-    F.count("*").alias("accounts_count"),
-    F.sum("annual_revenue").cast("decimal(16,2)").alias("total_revenue"),
-    F.round(F.avg("annual_revenue"), 2).cast("decimal(14,2)").alias("avg_revenue"),
-    F.sum("employee_count").cast("bigint").alias("total_employees"),
-    F.min("created_date").alias("first_created"),
-    F.max("created_date").alias("last_created"),
-    F.count(F.when(F.col("is_strategic"), 1)).cast("bigint").alias("strategic_accounts"),
-    *[
-        F.sum(F.when(F.col("tier") == t, F.col("annual_revenue")))
-        .cast("decimal(16,2)")
-        .alias(f"revenue_{t.lower()}")
-        for t in ["Gold", "Silver", "Bronze", "Unassigned"]
-    ],
-)
+summary = build_account_summary(silver)
 summary.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
     f"{target_schema}.account_summary"
 )
