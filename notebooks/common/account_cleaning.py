@@ -36,7 +36,8 @@ def clean_accounts(df):
 
 TIERS = ["Gold", "Silver", "Bronze"]
 UNASSIGNED = "Unassigned"
-TIER_COLUMNS = ["tier", "tier_since", "renewal_date", "health_score", "is_strategic"]
+TIER_COLUMNS = ["tier", "tier_since", "renewal_date", "health_score", "is_strategic",
+                "region_owner_team"]
 # clean_accounts keeps SILVER_COLUMNS; the silver table is those plus the tier fields.
 SILVER_TIER_COLUMNS = SILVER_COLUMNS + TIER_COLUMNS
 
@@ -64,6 +65,9 @@ def clean_tiers(df):
             F.when(flag.isin("true", "yes", "1"), F.lit(True))
             .when(flag.isin("false", "no", "0"), F.lit(False))
             .alias("is_strategic"),
+            F.when(F.trim("region_owner_team") == "", F.lit(None))
+            .otherwise(F.trim("region_owner_team"))
+            .alias("region_owner_team"),
         )
     )
 
@@ -78,4 +82,5 @@ def add_tiers(accounts, tiers):
         *SILVER_COLUMNS,
         F.coalesce(F.col("_tier"), F.lit(UNASSIGNED)).alias("tier"),
         "tier_since", "renewal_date", "health_score", "is_strategic",
+        "region_owner_team",
     )
