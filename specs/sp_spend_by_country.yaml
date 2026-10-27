@@ -1,0 +1,29 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Supplier spend demo, spend by country report.
+table: dev.opsbuddy_test.sp_spend_by_country
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: supplier_country, type: string}
+      - {name: suppliers_count, type: bigint}
+      - {name: preferred_suppliers, type: bigint}
+      - {name: po_count, type: bigint}
+      - {name: total_spend_usd, type: "decimal(16,2)"}
+      - {name: avg_po_usd, type: "decimal(14,2)"}
+      - {name: open_po_usd, type: "decimal(16,2)"}
+      - {name: first_po_date, type: date}
+      - {name: last_po_date, type: date}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: spend_present
+    type: null_rate
+    column: total_spend_usd
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [not_empty, spend_present]

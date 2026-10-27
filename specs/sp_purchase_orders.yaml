@@ -1,0 +1,39 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Supplier spend demo, silver purchase orders.
+table: dev.opsbuddy_test.sp_purchase_orders
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: po_id, type: string}
+      - {name: supplier_id, type: string}
+      - {name: supplier_name, type: string}
+      - {name: supplier_country, type: string}
+      - {name: po_date, type: date}
+      - {name: status, type: string}
+      - {name: buyer_team, type: string}
+      - {name: line_items, type: int}
+      - {name: amount, type: "decimal(14,2)"}
+      - {name: amount_usd, type: "decimal(14,2)"}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_po
+    type: uniqueness
+    columns: [po_id]
+    phases: [branch, uat, postprod]
+  - id: amount_usd_present
+    type: null_rate
+    column: amount_usd
+    max_pct: 0
+    phases: [branch, uat, postprod]
+  - id: known_status
+    type: accepted_values
+    column: status
+    values: [received, open, cancelled]
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_po, amount_usd_present, known_status]

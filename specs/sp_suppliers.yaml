@@ -1,0 +1,34 @@
+# DataSakshi check spec (read from main; a branch may add checks but never
+# remove or loosen these). Supplier spend demo, silver suppliers.
+table: dev.opsbuddy_test.sp_suppliers
+version: 1
+checks:
+  - id: expected_schema
+    type: schema
+    columns:
+      - {name: supplier_id, type: string}
+      - {name: supplier_name, type: string}
+      - {name: country, type: string}
+      - {name: city, type: string}
+      - {name: category, type: string}
+      - {name: payment_terms_days, type: int}
+      - {name: onboarded_date, type: date}
+      - {name: is_preferred, type: boolean}
+      - {name: annual_contract_usd, type: "decimal(14,2)"}
+      - {name: currency, type: string}
+    allow_extra_columns: true
+    phases: [branch, uat, postprod]
+  - id: not_empty
+    type: row_count
+    min: 1
+    phases: [branch, uat, postprod]
+  - id: one_row_per_supplier
+    type: uniqueness
+    columns: [supplier_id]
+    phases: [branch, uat, postprod]
+  - id: country_present
+    type: null_rate
+    column: country
+    max_pct: 0
+    phases: [branch, uat, postprod]
+required: [not_empty, one_row_per_supplier, country_present]

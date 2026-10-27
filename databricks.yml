@@ -276,6 +276,42 @@ resources:
             base_parameters:
               target_schema: ${var.bronze_target_schema}
 
+    sp_silver_suppliers:
+      name: "sp_silver_suppliers_${bundle.target}"
+      # Supplier spend demo, silver suppliers: one job per layer, so CI orders them by the
+      # tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: silver_suppliers
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/81_sp_suppliers.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    sp_silver_purchase_orders:
+      name: "sp_silver_purchase_orders_${bundle.target}"
+      # Supplier spend demo, silver purchase orders: one job per layer, so CI orders them by
+      # the tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: silver_purchase_orders
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/82_sp_purchase_orders.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
+    sp_gold_spend_by_country:
+      name: "sp_gold_spend_by_country_${bundle.target}"
+      # Supplier spend demo, spend by country report: one job per layer, so CI orders them
+      # by the tables they read and write. Small data, existing single-node cluster.
+      tasks:
+        - task_key: gold_spend_by_country
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/83_sp_spend_by_country.py
+            base_parameters:
+              target_schema: ${var.bronze_target_schema}
+
     late_fee_region_cap:
       name: "late_fee_region_cap_${bundle.target}"
       tasks:
