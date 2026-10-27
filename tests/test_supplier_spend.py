@@ -125,3 +125,51 @@ def test_a_country_with_suppliers_but_no_pos_shows_zero_spend(spark):
     assert (row.total_spend_usd, row.open_po_usd) == (Decimal("0.00"), Decimal("0.00"))
     assert row.first_po_date is None
 
+
+
+def test_is_preferred_reads_yes_1_true_and_treats_other_values_as_false(spark):
+    rows = _suppliers(
+        spark,
+        _supplier("A", preferred="yes"), _supplier("B", preferred="1"),
+        _supplier("C", preferred="false"), _supplier("D", preferred="TRUE"),
+        _supplier("E", preferred=""),
+    ).collect()
+    assert {r.supplier_id: r.is_preferred for r in rows} == {
+        "A": True, "B": True, "C": False, "D": True, "E": False}
+
+
+def test_an_unknown_currency_gives_a_null_usd_amount(spark):
+    suppliers = _suppliers(spark, _supplier("SP001"))
+    raw = spark.createDataFrame([_po("PO1", "SP001", "50.00", "XXX")], POS)
+    row = purchase_orders(raw, suppliers).collect()[0]
+    assert (row.amount, row.amount_usd) == (Decimal("50.00"), None)
+
+
+def test_a_lower_case_currency_is_converted(spark):
+    suppliers = _suppliers(spark, _supplier("SP001"))
+    raw = spark.createDataFrame([_po("PO1", "SP001", "100.00", "eur")], POS)
+    assert purchase_orders(raw, suppliers).collect()[0].amount_usd == Decimal("108.00")
+
+
+def test_a_po_with_an_unknown_supplier_keeps_its_row_with_null_supplier(spark):
+    suppliers = _suppliers(spark, _supplier("SP001"))
+    raw = spark.createDataFrame([_po("PO1", "NOPE")], POS)
+    out = purchase_orders(raw, suppliers).collect()
+    assert len(out) == 1
+    assert (out[0].supplier_name, out[0].supplier_country) == (None, None)
+
+
+def test_a_country_with_only_cancelled_pos_shows_zero_pos_and_spend(spark):
+    suppliers = _suppliers(spark, _supplier("SP001"))
+    raw = spark.createDataFrame([_po("PO1", "SP001", "500.00", status="Cancelled")], POS)
+    row = spend_by_country(purchase_orders(raw, suppliers), suppliers).collect()[0]
+    assert (row.po_count, row.total_spend_usd, row.open_po_usd) == (
+        0, Decimal("0.00"), Decimal("0.00"))
+    assert row.first_po_date is None
+
+
+def test_country_spellings_are_not_merged(spark):
+    suppliers = _suppliers(spark, _supplier("A", "USA"), _supplier("B", "US"))
+    raw = spark.createDataFrame([], POS)
+    out = spend_by_country(purchase_orders(raw, suppliers), suppliers).collect()
+    assert sorted(r.supplier_country for r in out) == ["US", "USA"]
