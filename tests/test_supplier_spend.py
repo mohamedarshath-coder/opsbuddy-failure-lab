@@ -16,6 +16,7 @@ from notebooks.common.supplier_spend import (  # noqa: E402
     SPEND_COLUMNS,
     SUPPLIER_COLUMNS,
     clean_suppliers,
+    COUNTRY_ALIASES,
     purchase_orders,
     spend_by_country,
 )
@@ -109,7 +110,7 @@ def test_spend_by_country_excludes_cancelled_and_counts_open(spark):
     report = spend_by_country(purchase_orders(raw, suppliers), suppliers)
     assert report.columns == SPEND_COLUMNS
     rows = {r.supplier_country: r for r in report.collect()}
-    usa = rows["USA"]
+    usa = rows["United States"]
     assert (usa.suppliers_count, usa.preferred_suppliers, usa.po_count) == (2, 1, 2)
     assert (usa.total_spend_usd, usa.avg_po_usd, usa.open_po_usd) == (
         Decimal("400.00"), Decimal("200.00"), Decimal("300.00")
@@ -169,7 +170,56 @@ def test_a_country_with_only_cancelled_pos_shows_zero_pos_and_spend(spark):
 
 
 def test_country_spellings_are_not_merged(spark):
+    # SCRUM-148 reversed the old behaviour: known spellings of one country now merge.
     suppliers = _suppliers(spark, _supplier("A", "USA"), _supplier("B", "US"))
     raw = spark.createDataFrame([], POS)
     out = spend_by_country(purchase_orders(raw, suppliers), suppliers).collect()
-    assert sorted(r.supplier_country for r in out) == ["US", "USA"]
+    assert [(r.supplier_country, r.suppliers_count) for r in out] == [("United States", 2)]
+
+
+def _countries(spark, *typed):
+    rows = [_supplier(f"S{i:02d}", c) for i, c in enumerate(typed)]
+    return [r.country for r in _suppliers(spark, *rows).orderBy("supplier_id").collect()]
+
+
+def test_mixed_case_spelling_with_spaces_maps_to_standard_name(spark):
+    assert _countries(spark, " usa ", "  U.S. ", "uSa") == ["United States"] * 3
+
+
+def test_alias_america_maps_to_united_states(spark):
+    assert _countries(spark, "America", "United States of America", "US") == ["United States"] * 3
+
+
+def test_every_ticket_alias_maps_to_its_standard_name(spark):
+    typed = ["UK", "Great Britain", "England", "GB", "Deutschland", "DE", "Bharat", "IN",
+             "U.A.E.", "Aus", "AU", "Japan", "Canada"]
+    assert _countries(spark, *typed) == [
+        "United Kingdom"] * 4 + ["Germany"] * 2 + ["India"] * 2 + [
+        "United Arab Emirates", "Australia", "Australia", "Japan", "Canada"]
+
+
+def test_unknown_spelling_is_kept_trimmed_and_not_dropped(spark):
+    assert _countries(spark, " Atlantis ", "") == ["Atlantis", ""]
+
+
+def test_standard_names_are_unchanged(spark):
+    names = sorted(set(COUNTRY_ALIASES.values()))
+    assert len(names) == 8
+    assert sorted(_countries(spark, *names)) == names
+
+
+def test_spend_by_country_has_one_row_per_country_and_totals_unchanged(spark):
+    suppliers = _suppliers(
+        spark, _supplier("A", "USA", "true"), _supplier("B", " america "),
+        _supplier("C", "U.S."), _supplier("D", "UK"), _supplier("E", "Atlantis"))
+    raw = spark.createDataFrame(
+        [_po("P1", "A", "100.00"), _po("P2", "B", "50.00"), _po("P3", "C", "25.50"),
+         _po("P4", "D", "10.00"), _po("P5", "E", "5.00")], POS)
+    orders = purchase_orders(raw, suppliers)
+    rows = {r.supplier_country: r for r in spend_by_country(orders, suppliers).collect()}
+    assert sorted(rows) == ["Atlantis", "United Kingdom", "United States"]
+    assert (rows["United States"].suppliers_count, rows["United States"].po_count) == (3, 3)
+    assert rows["United States"].total_spend_usd == Decimal("175.50")
+    assert sum(r.suppliers_count for r in rows.values()) == 5
+    assert sum(r.po_count for r in rows.values()) == 5
+    assert sum(r.total_spend_usd for r in rows.values()) == Decimal("190.50")

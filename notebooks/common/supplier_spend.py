@@ -3,8 +3,8 @@ by country report (notebooks 81-83).
 
 The procurement system sends every field as text. Buyers type a supplier's
 country by hand, so one country arrives in many spellings ("USA", "US",
-"United States", "America", ...); silver passes it through as typed (trimmed
-only), and the report shows one row per spelling. Amounts can carry thousands
+"United States", "America", ...); silver maps every known spelling to one
+standard name (unknown spellings are kept, trimmed). Amounts can carry thousands
 separators ("43,044.04") and are converted to USD with the fixed rates below;
 the supplier export can repeat a row. Spark expressions only, so they run on
 the executors.
@@ -17,6 +17,20 @@ Lineage, as built:
 FX_TO_USD = {
     "USD": 1.0, "GBP": 1.27, "EUR": 1.08, "INR": 0.012,
     "JPY": 0.0067, "AED": 0.27, "CAD": 0.73, "AUD": 0.66,
+}
+COUNTRY_ALIASES = {
+    "usa": "United States", "us": "United States", "u.s.": "United States",
+    "united states": "United States", "united states of america": "United States",
+    "america": "United States",
+    "uk": "United Kingdom", "great britain": "United Kingdom", "england": "United Kingdom",
+    "gb": "United Kingdom", "united kingdom": "United Kingdom",
+    "deutschland": "Germany", "de": "Germany", "germany": "Germany",
+    "bharat": "India", "in": "India", "india": "India",
+    "japan": "Japan",
+    "u.a.e.": "United Arab Emirates", "uae": "United Arab Emirates",
+    "united arab emirates": "United Arab Emirates",
+    "canada": "Canada",
+    "aus": "Australia", "au": "Australia", "australia": "Australia",
 }
 PO_STATUSES = ["received", "open", "cancelled"]
 
@@ -51,6 +65,18 @@ def _fx(currency_col):
     return rates[currency_col]
 
 
+def standard_country(col):
+    """The standard country name for a typed spelling (case and surrounding spaces
+    ignored). An unknown spelling is kept as typed, trimmed."""
+    from itertools import chain
+
+    from pyspark.sql import functions as F
+
+    trimmed = F.trim(col)
+    names = F.create_map(*[F.lit(x) for x in chain(*COUNTRY_ALIASES.items())])
+    return F.coalesce(names[F.lower(trimmed)], trimmed)
+
+
 def _usd(amount_col, currency_col):
     return (amount_col * _fx(currency_col)).cast("decimal(14,2)")
 
@@ -65,7 +91,7 @@ def _first(df, key):
 
 
 def clean_suppliers(raw):
-    """One row per supplier, typed. Country is passed through as typed (trimmed)."""
+    """One row per supplier, typed. Country is standardised."""
     from pyspark.sql import functions as F
 
     flag = F.lower(F.trim("is_preferred"))
@@ -73,7 +99,7 @@ def clean_suppliers(raw):
     return _first(raw, "supplier_id").select(
         F.trim("supplier_id").alias("supplier_id"),
         F.trim("supplier_name").alias("supplier_name"),
-        F.trim("country").alias("country"),
+        standard_country("country").alias("country"),
         F.trim("city").alias("city"),
         F.trim("category").alias("category"),
         F.regexp_extract(F.trim("payment_terms"), r"Net (\d+)", 1).cast("int")
